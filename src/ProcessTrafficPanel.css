@@ -1,0 +1,528 @@
+.ptPanel {
+  margin-top: 22px;
+  padding: 18px;
+
+  border:
+    1px solid #182329;
+
+  border-radius: 15px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(15, 21, 25, .96),
+      rgba(8, 12, 15, .98)
+    );
+}
+
+.ptHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 20px;
+}
+
+.ptEyebrow {
+  color: #54e99e;
+
+  font-size: 8px;
+  font-weight: 900;
+
+  letter-spacing: .16em;
+}
+
+.ptHeader h3 {
+  margin: 5px 0 4px;
+
+  color: #eef4f1;
+
+  font-size: 18px;
+}
+
+.ptHeader p {
+  margin: 0;
+
+  color: #64717b;
+
+  font-size: 9px;
+}
+
+.ptLive {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 6px 9px;
+
+  border:
+    1px solid
+    rgba(74, 234, 157, .18);
+
+  border-radius: 8px;
+
+  color: #5ae8a2;
+
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.ptLive > span {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: #5ae8a2;
+
+  box-shadow:
+    0 0 12px
+    rgba(90, 232, 162, .6);
+}
+
+.ptSummary {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      4,
+      minmax(0, 1fr)
+    );
+
+  gap: 9px;
+
+  margin-top: 17px;
+}
+
+.ptMetric {
+  display: grid;
+
+  grid-template-columns:
+    auto 1fr;
+
+  gap: 3px 8px;
+
+  padding: 11px;
+
+  border:
+    1px solid #172127;
+
+  border-radius: 9px;
+
+  background: #090e11;
+
+  color: #5ce9a2;
+}
+
+.ptMetric span {
+  color: #65727c;
+
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.ptMetric strong {
+  grid-column: 1 / -1;
+
+  color: #e4ece7;
+
+  font-size: 12px;
+}
+
+.ptTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-top: 20px;
+  margin-bottom: 9px;
+}
+
+.ptTitleRow strong {
+  color: #9ba9a3;
+
+  font-size: 8px;
+
+  letter-spacing: .12em;
+}
+
+.ptTitleRow span {
+  color: #56636d;
+
+  font-size: 7px;
+}
+
+.ptProcesses {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+.ptProcess {
+  padding: 13px;
+
+  border:
+    1px solid #172128;
+
+  border-radius: 11px;
+
+  background: #090d10;
+}
+
+.ptProcessTop {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+}
+
+.ptProcessIdentity {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  min-width: 0;
+}
+
+.ptProcessIdentity strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #d7dfdb;
+
+  font-size: 10px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptProcessIdentity span {
+  display: block;
+
+  margin-top: 3px;
+
+  color: #56636d;
+
+  font-size: 7px;
+}
+
+.ptProcessIcon {
+  width: 35px;
+  height: 35px;
+
+  display: grid;
+  place-items: center;
+
+  flex: 0 0 auto;
+
+  border:
+    1px solid #1e2a31;
+
+  border-radius: 9px;
+
+  background:
+    linear-gradient(
+      145deg,
+      #111a1f,
+      #0b1013
+    );
+
+  color: #5deaa4;
+
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ptImpact {
+  padding: 5px 7px;
+
+  border-radius: 6px;
+
+  font-size: 7px;
+  font-weight: 900;
+
+  white-space: nowrap;
+}
+
+.ptImpact-low {
+  color: #77858e;
+
+  background: #11171b;
+}
+
+.ptImpact-medium {
+  color: #e7b867;
+
+  background:
+    rgba(230, 177, 85, .08);
+
+  border:
+    1px solid
+    rgba(230, 177, 85, .15);
+}
+
+.ptImpact-high {
+  color: #ff7f82;
+
+  background:
+    rgba(255, 91, 96, .07);
+
+  border:
+    1px solid
+    rgba(255, 91, 96, .16);
+}
+
+.ptRates {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap: 7px;
+
+  margin-top: 12px;
+}
+
+.ptRates > div {
+  display: grid;
+
+  grid-template-columns:
+    auto 1fr;
+
+  gap: 2px 6px;
+
+  padding: 8px;
+
+  border:
+    1px solid #151e23;
+
+  border-radius: 7px;
+
+  color: #5deaa4;
+}
+
+.ptRates span {
+  color: #5c6871;
+
+  font-size: 6px;
+  font-weight: 800;
+}
+
+.ptRates strong {
+  grid-column: 1 / -1;
+
+  color: #d6dfda;
+
+  font-size: 10px;
+}
+
+.ptProtocols {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 6px;
+
+  margin-top: 8px;
+}
+
+.ptProtocols span {
+  padding: 4px 6px;
+
+  border:
+    1px solid #172127;
+
+  border-radius: 6px;
+
+  color: #687680;
+
+  font-size: 7px;
+}
+
+.ptTotals {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  margin-top: 9px;
+
+  color: #57636c;
+
+  font-size: 7px;
+}
+
+.ptTotals strong {
+  color: #84918b;
+}
+
+.ptAssessment {
+  display: grid;
+
+  grid-template-columns:
+    105px 1fr;
+
+  gap: 11px;
+
+  align-items: center;
+
+  margin-top: 10px;
+
+  padding: 9px;
+
+  border:
+    1px solid #172128;
+
+  border-radius: 8px;
+
+  background: #080c0f;
+}
+
+.ptAssessment span {
+  display: block;
+
+  color: #56636c;
+
+  font-size: 6px;
+}
+
+.ptAssessment strong {
+  display: block;
+
+  margin-top: 3px;
+
+  color: #d0d9d4;
+
+  font-size: 9px;
+}
+
+.ptAssessment p {
+  margin: 0;
+
+  color: #64717a;
+
+  font-size: 8px;
+
+  line-height: 1.45;
+}
+
+.ptEndButton {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+
+  margin-top: 10px;
+
+  padding: 7px 9px;
+
+  border:
+    1px solid
+    rgba(255, 102, 106, .15);
+
+  border-radius: 7px;
+
+  background:
+    rgba(255, 83, 90, .04);
+
+  color: #d97679;
+
+  font-size: 7px;
+  font-weight: 800;
+
+  cursor: pointer;
+}
+
+.ptEndButton:disabled {
+  opacity: .5;
+
+  cursor: wait;
+}
+
+.ptResult,
+.ptError {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  margin-top: 14px;
+
+  padding: 11px;
+
+  border:
+    1px solid #273139;
+
+  border-radius: 9px;
+
+  background: #0b1013;
+
+  color: #d9ae67;
+}
+
+.ptResultGood {
+  border-color:
+    rgba(69, 230, 148, .2);
+
+  color: #59e89f;
+}
+
+.ptResult strong,
+.ptError strong {
+  display: block;
+
+  color: #d2dbd6;
+
+  font-size: 9px;
+}
+
+.ptResult span,
+.ptError span {
+  display: block;
+
+  margin-top: 3px;
+
+  color: #64717a;
+
+  font-size: 8px;
+}
+
+.ptEmpty {
+  padding: 25px;
+
+  text-align: center;
+
+  color: #63707a;
+
+  font-size: 9px;
+}
+
+.ptFootnote {
+  margin-top: 12px;
+
+  color: #4f5c64;
+
+  font-size: 7px;
+
+  line-height: 1.5;
+}
+
+@media (
+  max-width: 900px
+) {
+  .ptSummary {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+}

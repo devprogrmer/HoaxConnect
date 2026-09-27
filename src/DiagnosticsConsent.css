@@ -1,0 +1,432 @@
+.diagnosticsOverlay {
+  position: fixed;
+  inset: 0;
+
+  z-index: 999999;
+
+  display: grid;
+  place-items: center;
+
+  padding: 28px;
+
+  background:
+    rgba(3, 6, 8, .86);
+
+  backdrop-filter:
+    blur(14px);
+}
+
+.diagnosticsModal {
+  position: relative;
+
+  width: min(
+    540px,
+    calc(100vw - 38px)
+  );
+
+  max-height:
+    calc(100vh - 40px);
+
+  overflow-y: auto;
+
+  padding: 30px;
+
+  border:
+    1px solid
+    rgba(70, 235, 151, .16);
+
+  border-radius: 18px;
+
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(56, 233, 143, .08),
+      transparent 38%
+    ),
+    #090d11;
+
+  box-shadow:
+    0 24px 90px
+    rgba(0, 0, 0, .55);
+}
+
+.diagnosticsClose {
+  position: absolute;
+
+  top: 15px;
+  right: 15px;
+
+  width: 32px;
+  height: 32px;
+
+  display: grid;
+  place-items: center;
+
+  border:
+    1px solid #1d2730;
+
+  border-radius: 8px;
+
+  background: #0d1217;
+
+  color: #65727e;
+
+  cursor: pointer;
+}
+
+.diagnosticsIcon {
+  width: 48px;
+  height: 48px;
+
+  display: grid;
+  place-items: center;
+
+  margin-bottom: 16px;
+
+  border:
+    1px solid
+    rgba(65, 231, 147, .2);
+
+  border-radius: 13px;
+
+  background:
+    rgba(50, 230, 139, .07);
+
+  color: #59e8a0;
+}
+
+.diagnosticsEyebrow {
+  color: #53e69c;
+
+  font-size: 8px;
+  font-weight: 900;
+
+  letter-spacing: .18em;
+}
+
+.diagnosticsModal h2 {
+  margin:
+    7px 0 8px;
+
+  font-size: 23px;
+
+  color: #e6ebef;
+}
+
+.diagnosticsIntro {
+  margin: 0;
+
+  color: #687581;
+
+  font-size: 10px;
+
+  line-height: 1.65;
+}
+
+.diagnosticsOptions {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  margin-top: 22px;
+}
+
+.diagnosticsOption {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns:
+    38px 1fr 26px;
+
+  align-items: center;
+
+  gap: 11px;
+
+  padding: 12px;
+
+  border:
+    1px solid #182129;
+
+  border-radius: 10px;
+
+  background: #090d11;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.diagnosticsOption:hover {
+  border-color: #27323c;
+}
+
+.diagnosticsOptionActive {
+  border-color:
+    rgba(
+      61,
+      231,
+      146,
+      .24
+    );
+
+  background:
+    rgba(
+      52,
+      231,
+      141,
+      .025
+    );
+}
+
+.diagnosticsOptionIcon {
+  width: 36px;
+  height: 36px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 8px;
+
+  background: #10161c;
+
+  color: #65eaaa;
+}
+
+.diagnosticsOptionText strong {
+  display: block;
+
+  color: #cbd3da;
+
+  font-size: 10px;
+}
+
+.diagnosticsOptionText span {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #596572;
+
+  font-size: 8px;
+
+  line-height: 1.45;
+}
+
+.diagnosticsCheck {
+  width: 21px;
+  height: 21px;
+
+  display: grid;
+  place-items: center;
+
+  border:
+    1px solid #2b3540;
+
+  border-radius: 6px;
+}
+
+.diagnosticsCheckActive {
+  border-color:
+    rgba(
+      64,
+      233,
+      149,
+      .38
+    );
+
+  background:
+    rgba(
+      64,
+      233,
+      149,
+      .08
+    );
+
+  color: #5feaa3;
+}
+
+.diagnosticsMaster {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-top: 17px;
+
+  padding:
+    14px 3px;
+}
+
+.diagnosticsMaster strong {
+  display: block;
+
+  color: #cbd3da;
+
+  font-size: 10px;
+}
+
+.diagnosticsMaster span {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #596571;
+
+  font-size: 8px;
+}
+
+.diagSwitch {
+  width: 42px;
+  height: 23px;
+
+  padding: 3px;
+
+  border: 0;
+  border-radius: 99px;
+
+  background: #242c34;
+
+  cursor: pointer;
+}
+
+.diagSwitch span {
+  width: 17px;
+  height: 17px;
+
+  margin: 0;
+
+  border-radius: 50%;
+
+  background: #77828c;
+
+  transition:
+    transform .18s ease;
+}
+
+.diagSwitchOn {
+  background:
+    rgba(
+      54,
+      230,
+      141,
+      .18
+    );
+}
+
+.diagSwitchOn span {
+  transform:
+    translateX(19px);
+
+  background: #5deaa3;
+}
+
+.diagnosticsAccept {
+  width: 100%;
+  height: 43px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 8px;
+
+  border:
+    1px solid
+    rgba(
+      60,
+      233,
+      148,
+      .34
+    );
+
+  border-radius: 9px;
+
+  background:
+    rgba(
+      53,
+      232,
+      141,
+      .1
+    );
+
+  color: #70efb0;
+
+  font-size: 9px;
+  font-weight: 900;
+
+  letter-spacing: .08em;
+
+  cursor: pointer;
+}
+
+.diagnosticsDecline {
+  width: 100%;
+
+  margin-top: 10px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #58646f;
+
+  font-size: 8px;
+
+  cursor: pointer;
+}
+
+.diagnosticsPrivacyButton {
+  position: fixed;
+
+  right: 18px;
+  bottom: 18px;
+
+  z-index: 5000;
+
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  height: 32px;
+
+  padding: 0 10px;
+
+  border:
+    1px solid #1d2730;
+
+  border-radius: 8px;
+
+  background:
+    rgba(
+      9,
+      13,
+      17,
+      .92
+    );
+
+  color: #63727f;
+
+  font-size: 7px;
+  font-weight: 800;
+
+  letter-spacing: .08em;
+
+  cursor: pointer;
+}
+
+.diagnosticsPrivacyButton:hover {
+  color: #68eaa8;
+
+  border-color:
+    rgba(
+      63,
+      232,
+      148,
+      .24
+    );
+}

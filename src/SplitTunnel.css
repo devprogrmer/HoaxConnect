@@ -1,0 +1,567 @@
+.splitPage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.splitHero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  min-height: 105px;
+
+  padding: 22px 24px;
+
+  border: 1px solid #171d25;
+  border-radius: 13px;
+
+  background:
+    linear-gradient(
+      120deg,
+      rgba(53, 232, 143, .045),
+      rgba(10, 13, 18, .8)
+    ),
+    #0a0d12;
+}
+
+.splitHero h2 {
+  margin: 7px 0 6px;
+  font-size: 22px;
+}
+
+.splitHero p {
+  margin: 0;
+
+  color: #606d7a;
+
+  font-size: 10px;
+}
+
+.splitSummary {
+  text-align: right;
+}
+
+.splitSummary span {
+  display: block;
+
+  color: #495561;
+
+  font-size: 7px;
+  font-weight: 800;
+
+  letter-spacing: .12em;
+}
+
+.splitSummary strong {
+  display: block;
+
+  margin-top: 5px;
+
+  color: #61eaa6;
+
+  font-size: 26px;
+}
+
+.splitModeCard,
+.splitAppsCard {
+  border: 1px solid #171d25;
+  border-radius: 13px;
+
+  background: #0a0d12;
+
+  padding: 22px;
+}
+
+.splitSectionTitle {
+  color: #4ce69a;
+
+  font-size: 8px;
+  font-weight: 800;
+
+  letter-spacing: .15em;
+}
+
+.splitModes {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 10px;
+
+  margin-top: 15px;
+}
+
+.splitModes button {
+  min-height: 92px;
+
+  display: grid;
+
+  grid-template-columns:
+    40px 1fr 20px;
+
+  gap: 11px;
+
+  align-items: center;
+
+  padding: 15px;
+
+  text-align: left;
+
+  border: 1px solid #192129;
+  border-radius: 10px;
+
+  background: #080c10;
+
+  color: #6b7683;
+
+  cursor: pointer;
+}
+
+.splitModes button:hover {
+  border-color: #27313b;
+}
+
+.splitModes button.splitModeActive {
+  border-color:
+    rgba(62, 232, 149, .3);
+
+  background:
+    rgba(51, 232, 141, .04);
+
+  color: #77efaf;
+}
+
+.splitModeIcon {
+  width: 38px;
+  height: 38px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 8px;
+
+  background: #10161c;
+
+  color: #5ee9a2;
+}
+
+.splitModes strong {
+  display: block;
+
+  color: #c9d0d8;
+
+  font-size: 10px;
+}
+
+.splitModes span {
+  display: block;
+
+  margin-top: 5px;
+
+  color: #586471;
+
+  font-size: 8px;
+
+  line-height: 1.45;
+}
+
+.splitAppsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.splitAppsHeader > div:first-child > strong {
+  display: block;
+
+  margin-top: 6px;
+
+  font-size: 16px;
+}
+
+.splitActions {
+  display: flex;
+  gap: 8px;
+}
+
+.splitActions button {
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  gap: 7px;
+
+  padding: 0 11px;
+
+  border: 1px solid #202832;
+  border-radius: 7px;
+
+  background: #0c1116;
+
+  color: #75818e;
+
+  font-size: 8px;
+  font-weight: 800;
+
+  letter-spacing: .07em;
+
+  cursor: pointer;
+}
+
+.splitSearch {
+  height: 43px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  margin-top: 17px;
+
+  padding: 0 13px;
+
+  border: 1px solid #1a222b;
+  border-radius: 8px;
+
+  background: #080b0f;
+
+  color: #505c68;
+}
+
+.splitSearch input {
+  flex: 1;
+
+  border: 0;
+  outline: none;
+
+  background: transparent;
+
+  color: #d7dde4;
+
+  font-size: 10px;
+}
+
+.splitAppList {
+  max-height: 510px;
+
+  margin-top: 12px;
+
+  overflow-y: auto;
+
+  border-top: 1px solid #141b22;
+}
+
+.splitApp {
+  width: 100%;
+
+  min-height: 69px;
+
+  display: grid;
+
+  grid-template-columns:
+    42px 1fr 32px;
+
+  align-items: center;
+
+  gap: 12px;
+
+  padding: 9px 11px;
+
+  border: 0;
+  border-bottom: 1px solid #141b22;
+
+  background: transparent;
+
+  text-align: left;
+
+  color: #89939f;
+
+  cursor: pointer;
+}
+
+.splitApp:hover {
+  background:
+    rgba(255, 255, 255, .015);
+}
+
+.splitAppSelected {
+  background:
+    rgba(52, 233, 142, .025);
+}
+
+.splitAppIcon {
+  width: 38px;
+  height: 38px;
+
+  display: grid;
+  place-items: center;
+
+  overflow: hidden;
+
+  border-radius: 8px;
+
+  background: #10161c;
+
+  color: #697581;
+}
+
+.splitAppIcon img {
+  width: 28px;
+  height: 28px;
+
+  object-fit: contain;
+}
+
+.splitAppInfo {
+  min-width: 0;
+}
+
+.splitAppName {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+}
+
+.splitAppInfo strong {
+  color: #d3dae2;
+
+  font-size: 10px;
+}
+
+.splitAppInfo > span {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #596673;
+
+  font-size: 8px;
+}
+
+.splitAppInfo small {
+  display: block;
+
+  margin-top: 3px;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  color: #3f4a55;
+
+  font-size: 7px;
+}
+
+.runningBadge {
+  padding: 3px 5px;
+
+  border: 1px solid
+    rgba(64, 231, 148, .16);
+
+  border-radius: 4px;
+
+  color: #5ce9a2 !important;
+
+  background:
+    rgba(52, 232, 142, .04);
+
+  font-size: 6px !important;
+  font-weight: 800;
+}
+
+.splitCheck {
+  width: 23px;
+  height: 23px;
+
+  display: grid;
+  place-items: center;
+
+  border: 1px solid #29323c;
+
+  border-radius: 6px;
+}
+
+.splitCheckOn {
+  border-color:
+    rgba(63, 232, 149, .4);
+
+  background:
+    rgba(52, 232, 142, .09);
+
+  color: #5deaa3;
+}
+
+.splitFooter {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  padding-top: 18px;
+
+  border-top: 1px solid #171e25;
+}
+
+.splitFooter strong {
+  display: block;
+
+  font-size: 9px;
+}
+
+.splitFooter span {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #53606c;
+
+  font-size: 8px;
+}
+
+.splitFooterRight {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+}
+
+.savedMessage {
+  display: flex !important;
+
+  align-items: center;
+
+  gap: 5px;
+
+  color: #59e8a0 !important;
+}
+
+.splitSave {
+  height: 38px;
+
+  padding: 0 16px;
+
+  border: 1px solid
+    rgba(62, 232, 148, .26);
+
+  border-radius: 8px;
+
+  background:
+    rgba(52, 232, 142, .08);
+
+  color: #6debaa;
+
+  font-size: 8px;
+  font-weight: 800;
+
+  letter-spacing: .08em;
+
+  cursor: pointer;
+}
+
+.splitLoading,
+.splitEmpty {
+  min-height: 180px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 10px;
+
+  color: #56626e;
+
+  font-size: 9px;
+}
+
+.splitError {
+  margin-top: 12px;
+
+  padding: 10px 12px;
+
+  border: 1px solid
+    rgba(255, 87, 105, .2);
+
+  border-radius: 7px;
+
+  background:
+    rgba(255, 62, 84, .035);
+
+  color: #d77b86;
+
+  font-size: 9px;
+}
+
+.splitEngineNotice {
+  display: flex;
+  align-items: center;
+
+  gap: 11px;
+
+  padding: 13px 15px;
+
+  border: 1px solid
+    rgba(73, 165, 255, .12);
+
+  border-radius: 9px;
+
+  background:
+    rgba(62, 143, 255, .025);
+
+  color: #629be1;
+}
+
+.splitEngineNotice strong {
+  display: block;
+
+  color: #8197b4;
+
+  font-size: 9px;
+}
+
+.splitEngineNotice span {
+  display: block;
+
+  margin-top: 4px;
+
+  color: #536577;
+
+  font-size: 8px;
+}
+
+.splitUnavailable {
+  min-height: 430px;
+
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  color: #4e5965;
+}
+
+.splitUnavailable strong {
+  margin-top: 15px;
+
+  color: #8b96a2;
+}
+
+.splitUnavailable span {
+  margin-top: 6px;
+
+  color: #5c6874;
+
+  font-size: 9px;
+}
+
+@media (max-width: 1000px) {
+  .splitModes {
+    grid-template-columns: 1fr;
+  }
+}

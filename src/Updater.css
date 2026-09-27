@@ -1,0 +1,167 @@
+.hcUpdateOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: grid;
+  place-items: center;
+  padding: 25px;
+  background: rgba(2, 4, 7, .82);
+  backdrop-filter: blur(10px);
+}
+
+.hcUpdateModal {
+  width: min(440px, 100%);
+  position: relative;
+  padding: 30px;
+  border: 1px solid rgba(69, 235, 153, .18);
+  border-radius: 15px;
+  background:
+    radial-gradient(
+      circle at 20% 0%,
+      rgba(56, 235, 145, .08),
+      transparent 35%
+    ),
+    #0a0e13;
+  box-shadow: 0 35px 100px rgba(0, 0, 0, .7);
+}
+
+.hcUpdateClose {
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  border: 0;
+  background: transparent;
+  color: #65717e;
+  cursor: pointer;
+}
+
+.hcUpdateIcon {
+  width: 55px;
+  height: 55px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  border: 1px solid rgba(66, 235, 153, .2);
+  border-radius: 13px;
+  color: #5aeca3;
+  background: rgba(53, 235, 145, .06);
+}
+
+.hcUpdateEyebrow {
+  color: #50e99e;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+.hcUpdateModal h2 {
+  margin: 9px 0 8px;
+  color: #f3f7f5;
+  font-size: 22px;
+}
+
+.hcUpdateModal p {
+  margin: 0;
+  color: #697582;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.hcUpdateActions {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 9px;
+  margin-top: 25px;
+}
+
+.hcUpdatePrimary,
+.hcUpdateSecondary {
+  height: 43px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+
+.hcUpdatePrimary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(60, 233, 149, .3);
+  background: rgba(50, 232, 140, .11);
+  color: #71efad;
+}
+
+.hcUpdateSecondary {
+  border: 1px solid #202833;
+  background: #0b0f14;
+  color: #798592;
+}
+
+.hcUpdateProgress {
+  height: 6px;
+  margin-top: 24px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: #171e26;
+}
+
+.hcUpdateProgress span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    #35dd83,
+    #63f1b0
+  );
+  transition: width .2s ease;
+}
+
+.hcUpdatePercent {
+  display: block;
+  margin-top: 9px;
+  color: #67e9a7;
+  text-align: right;
+  font-size: 10px;
+}
+
+.hcUpdateDock {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 15000;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #1b252a;
+  border-radius: 8px;
+  background: rgba(8, 12, 15, .95);
+  color: #65726d;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, .25);
+}
+
+.hcUpdateDock span {
+  font-size: 8px;
+}
+
+.hcUpdateDock strong {
+  color: #57e99f;
+  font-size: 7px;
+  letter-spacing: .08em;
+}
+
+.hcUpdateSpin {
+  animation: hcUpdaterSpin .8s linear infinite;
+}
+
+@keyframes hcUpdaterSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

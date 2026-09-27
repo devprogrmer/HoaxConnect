@@ -1,0 +1,82 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# JavaScript and TypeScript build output
+dist/
+dist-ssr/
+backend/dist/
+coverage/
+.vite/
+.cache/
+*.tsbuildinfo
+
+# Electron packages and release artifacts
+release/
+out/
+*.exe
+*.msi
+*.msix
+*.blockmap
+*.AppImage
+*.dmg
+*.deb
+*.rpm
+
+# Native build output
+native-bin/
+native/**/bin/
+native/**/obj/
+
+# Local backups and temporary files
+backups/
+*.backup
+*.before-*
+*.before.*
+*.bak
+*.tmp
+.tmp/
+tmp/
+
+# Runtime configuration and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+*.env
+*.env.*
+!.env.example
+!**/.env.example
+!*.env.example
+!**/*.env.example
+deploy/backend.env
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local Docker overrides
+docker-compose.override.yml
+docker-compose.*.override.yml
+
+# Editors and operating systems
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
