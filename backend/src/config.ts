@@ -40,6 +40,8 @@ function boolean(name: string, fallback: boolean): boolean {
 }
 
 const jwtAccessSecret = required("JWT_ACCESS_SECRET");
+const jwtIssuer = required("JWT_ISSUER");
+const jwtAudience = required("JWT_AUDIENCE");
 const refreshTokenPepper = required("REFRESH_TOKEN_PEPPER");
 
 if (jwtAccessSecret.length < 64) {
@@ -73,6 +75,8 @@ export const config = Object.freeze({
   databaseSsl: boolean("DATABASE_SSL", false),
 
   jwtAccessSecret,
+  jwtIssuer,
+  jwtAudience,
   refreshTokenPepper,
   accessTokenTtlSeconds: integer("ACCESS_TOKEN_TTL_SECONDS", 600),
   refreshTokenTtlDays: integer("REFRESH_TOKEN_TTL_DAYS", 30),

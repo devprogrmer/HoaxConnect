@@ -53,6 +53,8 @@ export async function signAccessToken(
   })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(claims.sub)
+    .setIssuer(config.jwtIssuer)
+    .setAudience(config.jwtAudience)
     .setIssuedAt()
     .setExpirationTime(`${config.accessTokenTtlSeconds}s`)
     .sign(accessSecret);
@@ -63,7 +65,9 @@ export async function verifyAccessToken(
 ): Promise<AccessClaims> {
   try {
     const result = await jwtVerify(token, accessSecret, {
-      algorithms: ["HS256"]
+      algorithms: ["HS256"],
+      issuer: config.jwtIssuer,
+      audience: config.jwtAudience
     });
 
     const payload = result.payload;
