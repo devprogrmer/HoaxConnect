@@ -99,7 +99,7 @@ password `demo123`. This must be removed during Stage 2C.
 
 ## Stage 2C: Desktop Backend Authentication
 
-Status: IN PROGRESS
+Status: BLOCKED - awaiting implementation-plan approval
 
 Completed:
 
@@ -874,6 +874,8 @@ Standard-user HoaxConnect.exe
 authenticated restricted IPC
         |
 elevated HoaxConnectService.exe
+```
+
 The service owns WireGuard, routes, DNS, firewall, and privileged monitoring.
 Service installation, repair, or update may require elevation. Normal login,
 account management, location selection, connection, and diagnostics must run
