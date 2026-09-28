@@ -951,4 +951,6 @@ main() {
   hc_install_apply
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

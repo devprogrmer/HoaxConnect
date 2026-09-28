@@ -14,6 +14,7 @@ tests=(
   "$HC_TEST_DIR/test-install-dry-run.sh"
   "$HC_TEST_DIR/test-install-transaction.sh"
   "$HC_TEST_DIR/test-backup-restore.sh"
+  "$HC_TEST_DIR/test-update.sh"
 )
 
 failures=0
