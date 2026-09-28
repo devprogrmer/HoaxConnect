@@ -80,3 +80,6 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Portable deployment runtime markers
+**/.hoaxconnect-release

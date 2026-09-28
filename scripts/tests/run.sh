@@ -11,6 +11,8 @@ tests=(
   "$HC_TEST_DIR/test-config.sh"
   "$HC_TEST_DIR/test-compose.sh"
   "$HC_TEST_DIR/test-nginx.sh"
+  "$HC_TEST_DIR/test-install-dry-run.sh"
+  "$HC_TEST_DIR/test-install-transaction.sh"
 )
 
 failures=0
