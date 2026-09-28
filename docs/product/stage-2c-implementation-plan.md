@@ -18,6 +18,10 @@ Modify:
 - `backend/src/security.ts`
 - `backend/src/config.ts`
 - `backend/src/app.ts`
+- `backend/.env.example`
+- `deploy/backend.env.example`
+- `deploy/templates/backend.env.template`
+- `deploy/compose/compose.source.yml` when new variables are required
 - `backend/tests/setup.ts`
 - `electron/main.cjs`
 - `electron/preload.cjs`
@@ -137,9 +141,13 @@ Backend verifies the nonce hash, expiry, purpose, bindings, attempt count and
 signature inside one transaction. A challenge is consumed exactly once.
 Renderer never receives the nonce, signature operation or private key.
 
-Key rotation revokes sessions associated with the previous key. Reinstallation
-is a new device enrollment and cannot bypass the device limit. Lost-device
-recovery remains dependent on Stage 3 OTP or explicit Admin action.
+Key rotation revokes sessions associated with the previous key. A normal
+application reinstall preserves the same device identity when its protected
+userData and device key remain available. New enrollment occurs only after an
+intentional identity reset, protected-key loss, Windows profile or OS change,
+device change, or explicit recovery. Identity loss never bypasses the device
+limit. Lost-device recovery remains dependent on Stage 3 OTP or explicit
+Admin action.
 
 ## Registration And Login
 
@@ -174,8 +182,9 @@ requests from exceeding the device limit.
 
 Refresh is a two-step proof-backed operation:
 
-1. Main submits the refresh-session identifier through the refresh-challenge
-   endpoint.
+1. Main submits the refresh token through the refresh-challenge endpoint; Backend
+   authenticates its hash without rotating it. A session identifier alone is
+   insufficient.
 2. Backend issues a short-lived challenge bound to that session and device.
 3. Main signs it and submits the refresh token plus proof.
 4. Backend locks the session family, verifies proof and token, rotates the
@@ -260,14 +269,183 @@ Renderer may receive:
 - Ban, suspension or revocation reason.
 - Stable error codes.
 
+Renderer password boundary:
+
+- Renderer may temporarily hold the plaintext password while the user enters
+  and submits it.
+- Pass it only through the narrow typed authentication IPC request to Main.
+- Never persist, log, cache, echo, or include it in telemetry or durable state.
+- Main and Backend never return the password to Renderer.
+- Clear password form state as soon as practical after submission.
+- Password hashes never cross into Renderer.
+
 Renderer must never receive:
 
 - Access or refresh tokens.
-- Passwords or password hashes.
+- Password hashes.
 - Device private key.
 - Raw challenges or signatures.
 - DPAPI/safeStorage encryption material.
 - Unrestricted Backend responses.
+
+## Refresh Rotation Crash Recovery
+
+Add table `refresh_rotation_recoveries`:
+
+- `id uuid PRIMARY KEY`
+- `session_family_id uuid NOT NULL`
+- `previous_session_id uuid NOT NULL`
+- `replacement_session_id uuid NOT NULL`
+- `recovery_id uuid NOT NULL UNIQUE`
+- `recovery_secret_hash char(64) NOT NULL`
+- `response_ciphertext bytea NOT NULL`
+- `expires_at timestamptz NOT NULL`
+- `consumed_at timestamptz`
+- `created_at timestamptz NOT NULL DEFAULT now()`
+
+The client generates a random recovery ID and high-entropy recovery secret for
+each refresh attempt. Only the recovery-secret hash is stored. The recovery
+secret is transmitted inside the TLS-protected refresh request and is never
+logged.
+
+Inside one database transaction Backend:
+
+1. Locks the current session and family.
+2. Verifies refresh token and signed device challenge.
+3. Rotates the refresh session.
+4. Encrypts the replacement response with a dedicated server-side recovery encryption key supplied outside PostgreSQL.
+5. Stores its recovery ID, secret hash, replacement IDs, ciphertext and expiry.
+6. Commits rotation and recovery record together.
+
+If the response is lost, the client retries with the same recovery ID and
+secret. Backend verifies the hash using constant-time comparison and returns
+the same replacement response once. Recovery is bound to the same session
+family, device key and request purpose.
+
+Recovery records:
+
+- Expire within a short configured interval.
+- Are single-use after successful recovery.
+- Cannot rotate a session again.
+- Cannot suppress reuse detection for another recovery ID or secret.
+- Are deleted by bounded cleanup after expiry/consumption.
+- Store no plaintext refresh token or recovery secret.
+
+Tests cover lost response, Electron crash, valid recovery, wrong secret, wrong
+device, expiry, replay after consumption, concurrent recovery, cleanup and
+normal refresh-token reuse detection.
+
+## Electron Backend Endpoint And TLS Policy
+
+Electron Main obtains the API base URL from packaged application configuration
+with an explicit development override.
+
+Production policy:
+
+- HTTPS is mandatory.
+- Use normal certificate-chain and hostname validation.
+- Never set `rejectUnauthorized=false`.
+- Never fall back to HTTP.
+- Never hardcode a production raw-IP endpoint.
+- Renderer cannot supply or change the Backend URL.
+- Apply connection and request timeouts.
+- Retry only safe/idempotent operations with bounded attempts and backoff.
+- Do not automatically retry password submission or non-idempotent mutations.
+- Map timeout, DNS, TLS and unreachable failures to stable
+  `BACKEND_UNAVAILABLE`-family errors without leaking internals.
+
+Development mode may explicitly allow a loopback HTTP endpoint through a
+development-only configuration that cannot be enabled in packaged production.
+
+Any new configuration variable must be documented consistently in:
+
+- `backend/.env.example`
+- `deploy/backend.env.example`
+- `deploy/templates/backend.env.template`
+- Compose/deployment references that consume it
+
+No runtime secret or production credential enters Git.
+
+## Protected Storage Fail-Closed Policy
+
+Before storing a device private key or refresh credential, Electron Main must
+require `safeStorage.isEncryptionAvailable()`.
+
+If secure encryption is unavailable:
+
+- Never fall back to plaintext.
+- Never persist reusable credentials.
+- Never expose secrets to Renderer.
+- Abort secure enrollment or persistence.
+- Return `SECURE_STORAGE_UNAVAILABLE`.
+- Show a controlled error without sensitive details.
+
+Tests cover unavailable encryption, encryption/decryption failure, corrupt
+ciphertext, interrupted atomic writes and successful recovery.
+
+A normal reinstall preserves device identity while protected Electron
+`userData` and the device key remain available. Installer and updater must not
+delete a valid protected device identity.
+
+## Unverified Phone Policy
+
+Normalize accepted phone input to canonical E.164 before storage.
+
+Until Stage 3 verification:
+
+- Phone is an unverified contact claim.
+- It is not trusted for login or recovery.
+- Phone login is disabled.
+- Responses report `phone_verified=false`.
+- No OTP or verification success is simulated.
+
+An unverified claim does not permanently reserve a phone number. Store it as an
+expiring pending claim, or apply uniqueness only to verified numbers.
+
+After successful Stage 3 OTP, promotion and verified-number uniqueness occur
+atomically. Registration and recovery errors remain enumeration-safe.
+
+## JWT Binding
+
+Access-token signing and verification require:
+
+- Algorithm `HS256`.
+- Configured issuer.
+- Configured audience.
+- Existing strong JWT secret requirements.
+- Short access-token TTL.
+- Required user, session, device and authorization-version claims.
+
+Verification rejects a missing or unexpected issuer, audience or algorithm.
+Issuer and audience must be documented in every affected configuration
+template.
+
+## Endpoint Abuse Controls
+
+Apply explicit rate limits to:
+
+- Device-challenge creation.
+- Device-proof submission.
+- Refresh-challenge creation.
+- Refresh rotation and recovery.
+- SSE reconnect.
+- Policy polling fallback.
+
+Use per-IP and, when authenticated, per-account, per-session and per-device
+limits.
+
+Challenge endpoints must:
+
+- Return enumeration-safe errors where practical.
+- Require authentication or a short-lived flow credential.
+- Reject use of a session, device or challenge identifier by itself.
+- Prevent cross-account challenge consumption or invalidation.
+- Scope failed attempts to the authenticated flow.
+- Avoid revealing account or device existence.
+- Apply bounded reconnect/polling backoff.
+
+Tests cover rate boundaries, guessed identifiers, cross-account attempts,
+proof-attempt exhaustion, separate principals and cooldown recovery.
 
 ## Failure And Recovery Cases
 
