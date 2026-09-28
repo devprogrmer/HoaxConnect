@@ -702,3 +702,263 @@ UI, schema, mocks, source inspection, local tests, deployment, and real
 end-to-end operation remain separate verification states.
 
 Stage 2C must not begin until this revised roadmap is explicitly approved.
+
+---
+
+## Final Requirements Before Stage 2C
+
+These requirements supplement the approved roadmap and are authoritative where
+earlier wording is incomplete.
+
+### Admin-Managed Payment Providers
+
+Payment providers must be configured through the Admin Panel. Production
+configuration must not require SSH access or manual environment-file editing.
+
+Superadmin can configure:
+
+- Zarinpal.
+- Zibal.
+- Behpardakht Mellat.
+- SEP.
+
+Each provider supports:
+
+- Enabled or disabled state.
+- Merchant identifier.
+- API, terminal, or provider credentials where required.
+- Callback configuration.
+- Default-provider selection.
+- Explicit `TEST CONFIGURATION` action.
+- Masked credential display.
+- Credential rotation with audit history.
+
+Provider secrets remain encrypted using the external server master key. After
+saving, neither Admin APIs nor Admin UI may reveal the original secret again.
+
+### Real Gaming Route Measurement
+
+Windows and Android clients measure real route quality from the user device to
+available HoaxConnect nodes where technically possible:
+
+- Latency.
+- Jitter.
+- Packet loss.
+- Reachability.
+
+Backend and Node Agent separately provide:
+
+- Node health.
+- Load.
+- Capacity.
+- Maintenance state.
+- Draining state.
+
+`AUTO SELECT BEST ROUTE` combines real client measurements with authoritative
+Backend node availability and load.
+
+UI and APIs must distinguish:
+
+- `CLIENT MEASUREMENT`
+- `SERVER/NODE HEALTH METADATA`
+
+Do not generate deterministic, random, or fabricated latency, jitter, packet
+loss, reachability, health, capacity, or load values.
+
+### VPN Address Management
+
+Stage 5 includes transaction-safe VPN IP address management.
+
+For each peer:
+
+- Allocate a unique tunnel address.
+- Prevent duplicate allocation under concurrent requests.
+- Persist the allocation.
+- Release or reclaim it according to an explicit lifecycle policy.
+- Preserve allocations across Backend and Node Agent restart.
+- Reconcile persisted allocation against actual WireGuard peers.
+- Audit allocation, release, reclaim, and conflict resolution.
+
+Allocation must use database uniqueness constraints plus transactional locking
+or an equivalent atomic design. Reconciliation must never silently assign one
+address to multiple active peers.
+
+### Node Heartbeats and Maintenance
+
+Each Node Agent sends authenticated heartbeat and lease information.
+
+Backend states:
+
+- `online`
+- `degraded`
+- `offline`
+- `maintenance`
+- `draining`
+
+Draining behavior:
+
+- Reject new VPN sessions on the node.
+- Allow existing sessions to continue according to Admin policy.
+- Allow Admin to observe remaining sessions.
+- Allow safe node evacuation before maintenance.
+
+Heartbeat policy defines:
+
+- Expected interval.
+- Lease expiry.
+- Degraded threshold.
+- Offline threshold.
+- Recovery transition.
+- Alert generation.
+- VPN authorization behavior when node state becomes stale.
+
+### Bounded Quota Overshoot
+
+Stage 7 uses practical accounting cadence rather than long periodic reporting
+alone.
+
+Node Agent performs:
+
+- A regular time-based checkpoint.
+- A checkpoint after a significant transferred-byte delta.
+- A final flush on normal disconnect.
+- Retry of unacknowledged reports.
+- Durable checkpoint identity for deduplication.
+
+Backend performs:
+
+- Stale-accounting detection.
+- Alerting and policy response for delayed node reports.
+- Transactional usage and checkpoint updates.
+- Bounded quota-overshoot policy.
+- Fail-safe handling when authoritative accounting is unavailable.
+
+The selected reporting interval and byte threshold must establish an explicit
+maximum expected overshoot bound. The product must not claim exact quota
+enforcement while its reporting design permits unbounded additional traffic.
+### Transaction-Safe Concurrency Limits
+
+Device enrollment and concurrent VPN-session authorization must be atomic.
+
+For a limit of two, simultaneous extra-device or session requests must not both
+succeed.
+
+Use transactional row locking, advisory locking, serializable transactions, or
+an equivalent atomic mechanism around:
+
+- Accepted-device count.
+- Active VPN-session leases.
+- Plan limits.
+- New device or session creation.
+- Audit and violation creation.
+
+VPN sessions use renewable leases. Define:
+
+- Lease duration and heartbeat cadence.
+- Cleanup after client, service, node, or Backend crash.
+- Idempotent disconnect.
+- Expired lease reclamation.
+- Reconciliation with actual Node Agent peers.
+- Protection against counting one session twice.
+
+### Windows Standard-User UI
+
+After `HoaxConnectService.exe` is installed, normal Electron operation must not
+require permanent Administrator privileges.
+
+Target architecture:
+
+```text
+Standard-user HoaxConnect.exe
+        |
+authenticated restricted IPC
+        |
+elevated HoaxConnectService.exe
+The service owns WireGuard, routes, DNS, firewall, and privileged monitoring.
+Service installation, repair, or update may require elevation. Normal login,
+account management, location selection, connection, and diagnostics must run
+as a standard user.
+Stage 6 must migrate away from
+requestedExecutionLevel=requireAdministrator and verify standard-user UI
+operation plus privileged-service isolation.
+### Consolidate Privileged Helpers
+
+Do not retain competing privileged networking engines.
+
+The existing HoaxTraffic ETW helper provides real process-traffic data and must
+remain functional during migration.
+
+When Windows Service supports ETW and network monitoring, either move that
+functionality into the service or define a deliberate single-owner boundary.
+
+Migration must:
+
+- Preserve real ETW process-traffic behavior.
+- Compare old and new runtime output.
+- Avoid duplicate collection and conflicting operations.
+- Remove the old helper only after packaged runtime verification.
+- Never replace working telemetry with mocks.
+
+### Email Account Policy
+
+HoaxConnect selects policy A:
+
+- Phone OTP is the primary required verification method.
+- Phone OTP is the primary account and password recovery method.
+- Email remains a supported account and contact identifier.
+- Email verification is optional until a real provider stage is approved.
+- No feature may require verified email without a delivery provider.
+- Email verification and email password-reset schema must not pretend to be
+  active behavior.
+- Fake email delivery and fabricated verification success are forbidden.
+
+Mandatory email verification later requires a real provider, delivery tracking,
+expiry, replay protection, rate limits, masked credentials, and end-to-end
+verification.
+### Production Updater and Supply Chain
+
+Stage 10 must replace development HTTP updating before production.
+
+Requirements:
+
+- HTTPS-only production auto-updater.
+- Full TLS certificate and hostname validation.
+- Signed update artifacts and metadata.
+- Windows Authenticode verification.
+- Reject invalid, unsigned, expired, or mismatched updates.
+- Atomic installation and rollback-safe replacement.
+- Differential-update tests across actual released versions.
+- Full-update fallback and interrupted-update tests.
+- Rollback tests.
+- Dependency vulnerability scanning.
+- Lockfile and dependency security review.
+- SBOM and release manifest where practical.
+- Artifact provenance, digest, version, and compatibility records.
+
+The existing HTTP updater is development-only and cannot be the final
+production updater.
+
+### Acceptance Evidence for Every Future Stage
+
+Every Stage completion report must list:
+
+1. Fake behavior removed.
+2. Real replacement implemented.
+3. Automated verification completed.
+4. Packaged or runtime verification completed.
+5. Remaining unverified behavior.
+
+A Stage is not `VERIFIED` from documentation, schema existence, compilation,
+static checks, UI screenshots, mocks, or source inspection alone.
+
+Use separate states:
+
+- Documented.
+- Implemented.
+- Automated-test verified.
+- Packaged-runtime verified.
+- End-to-end verified.
+- Production verified.
+
+Stage 2C remains blocked until its detailed implementation plan is explicitly
+approved.
