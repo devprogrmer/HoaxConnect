@@ -13,6 +13,7 @@ tests=(
   "$HC_TEST_DIR/test-nginx.sh"
   "$HC_TEST_DIR/test-install-dry-run.sh"
   "$HC_TEST_DIR/test-install-transaction.sh"
+  "$HC_TEST_DIR/test-backup-restore.sh"
 )
 
 failures=0
