@@ -147,7 +147,7 @@ test_reinstall_preserves_secrets_and_mode() {
     "$first_pepper" \
     "$(sed -n 's/^REFRESH_TOKEN_PEPPER=//p' "$target")"
 
-  if grep -Fq "$first_password" "$HC_TEMPLATE"; then
+  if grep -Fq -- "$first_password" "$HC_TEMPLATE"; then
     hc_test_fail "tracked template contains a generated secret"
   fi
 
