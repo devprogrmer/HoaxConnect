@@ -1,5 +1,11 @@
 # HoaxConnect Portable Deployment Design
 
+> **Historical / Superseded roadmap naming:** This document records the
+> portable-deployment work as it was scoped at the time. References here to
+> "Stage 2C" are historical and do not define the current product roadmap.
+> The authoritative Stage 2C is Desktop Backend Authentication + Real Device
+> Identity in `docs/product/implementation-roadmap.md`.
+
 Status: Proposed for review
 Stage: 2B-B
 Supported hosts: Ubuntu Server 22.04 and 24.04 LTS, x86_64

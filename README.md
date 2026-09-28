@@ -15,8 +15,9 @@ The portable deployment currently provides:
 - Preservation of configuration, releases, backups, and database volume.
 - A guarded disposable-host end-to-end test harness.
 
-This stage does not publish the website, Admin Panel, Windows installer,
-Android app, or desktop update artifacts. Those remain Stage 2C work.
+Website, Admin Panel, Android, Windows Service, and production desktop
+release/update work belong to later roadmap stages. The authoritative
+Stage 2C scope is Desktop Backend Authentication + Real Device Identity.
 
 ## Requirements
 
@@ -24,9 +25,8 @@ Use Ubuntu 22.04 or newer with root access, a public IPv4 address, a domain
 pointing to the server, and inbound TCP ports 80 and 443. Git, Docker Compose
 v2, Nginx, Certbot, curl, OpenSSL, Node.js, and npm are required.
 
-The repository is private. Clone it using a read-only GitHub deploy key or a
-suitably scoped token. Never commit private keys, tokens, environment files,
-or generated secrets.
+The repository is public. Clone it over HTTPS or SSH. Never commit private
+keys, tokens, environment files, or generated secrets.
 
 ```bash
 git clone git@github.com:devprogrmer/HoaxConnect.git

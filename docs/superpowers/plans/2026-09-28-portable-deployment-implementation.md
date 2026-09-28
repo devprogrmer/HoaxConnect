@@ -1,5 +1,11 @@
 # Portable Deployment Implementation Plan
 
+> **Historical / Superseded roadmap naming:** This document records the
+> portable-deployment work as it was scoped at the time. References here to
+> "Stage 2C" are historical and do not define the current product roadmap.
+> The authoritative Stage 2C is Desktop Backend Authentication + Real Device
+> Identity in `docs/product/implementation-roadmap.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build an idempotent source-mode installer and maintenance toolset for the real HoaxConnect control plane on supported Ubuntu servers.
