@@ -8,6 +8,8 @@ HC_TEST_DIR="$(
 
 tests=(
   "$HC_TEST_DIR/test-common.sh"
+  "$HC_TEST_DIR/test-config.sh"
+  "$HC_TEST_DIR/test-compose.sh"
 )
 
 failures=0

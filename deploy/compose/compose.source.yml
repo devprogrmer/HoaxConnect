@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - wal_compression=on
+      - -c
+      - log_min_duration_statement=1000
+    volumes:
+      - hoaxconnect_pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 1.50
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: ${HC_RELEASE_DIR:?HC_RELEASE_DIR is required}/backend
+      dockerfile: Dockerfile
+    image: hoaxconnect-api:${HC_RELEASE_ID:?HC_RELEASE_ID is required}
+    restart: unless-stopped
+    env_file:
+      - ${HC_ENV_FILE:?HC_ENV_FILE is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    mem_limit: 256m
+    cpus: 1.00
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3100/api/v1/health/ready')
+          .then(r=>{if(!r.ok)process.exit(1)})
+          .catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  backend:
+    driver: bridge
+    internal: true
+
+volumes:
+  hoaxconnect_pgdata:
+    name: hoaxconnect_pgdata

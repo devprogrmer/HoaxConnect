@@ -7,3 +7,4 @@ backend.env
 *.key
 *.pfx
 *.p12
+!templates/backend.env.template
