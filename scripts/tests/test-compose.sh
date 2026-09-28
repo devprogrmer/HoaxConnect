@@ -132,6 +132,15 @@ assert volumes["hoaxconnect_pgdata"].get("name") == (
 networks = data.get("networks", {})
 backend = networks.get("backend", {})
 assert backend.get("internal") is True, backend
+
+edge = networks.get("edge", {})
+assert edge.get("internal") is not True, edge
+
+postgres_networks = set(postgres.get("networks", {}))
+api_networks = set(api.get("networks", {}))
+
+assert postgres_networks == {"backend"}, postgres_networks
+assert api_networks == {"backend", "edge"}, api_networks
 PY_VALIDATE_COMPOSE_JSON
 
   hc_verify_network_boundaries

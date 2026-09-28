@@ -137,18 +137,22 @@ hc_validate_dns() {
       awk '/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/'
   )"
 
-  public_ip="$(
-    curl \
-      --fail \
-      --silent \
-      --show-error \
-      --max-time 10 \
-      --ipv4 \
-      https://api.ipify.org
-  )" || {
-    hc_die "Unable to determine the public IPv4 address."
-    return 1
-  }
+  if [[ -n "${HC_PUBLIC_IP:-}" ]]; then
+    public_ip="$HC_PUBLIC_IP"
+  else
+    public_ip="$(
+      curl \
+        --fail \
+        --silent \
+        --show-error \
+        --max-time 10 \
+        --ipv4 \
+        https://api.ipify.org
+    )" || {
+      hc_die "Unable to determine the public IPv4 address."
+      return 1
+    }
+  fi
 
   if [[ -z "$resolved" ]] ||
      ! grep -Fxq -- "$public_ip" <<<"$resolved"
@@ -298,6 +302,7 @@ hc_obtain_certificate() {
   actual_acme="$(hc_path "$HC_ACME_ROOT")" || return 1
 
   mkdir -p -- "$actual_acme"
+  chmod 0711 "$(dirname -- "$actual_acme")"
   chmod 0755 "$actual_acme"
 
   arguments=(

@@ -423,6 +423,7 @@ hc_restore_recover_previous_database() {
 
 hc_restore_transaction() {
   local actual_backend_env
+  local actual_install_env
   local database
   local user
   local pre_restore_archive
@@ -445,6 +446,30 @@ hc_restore_transaction() {
     "$actual_backend_env" \
     "Backend environment" ||
     return 1
+
+  actual_install_env="$(
+    hc_path "$HC_BACKUP_INSTALL_ENV"
+  )" || return 1
+
+  hc_backup_require_file \
+    "$actual_install_env" \
+    "Installation metadata" ||
+    return 1
+
+  HC_RELEASE_ID="$(
+    hc_backup_read_env "$actual_install_env" RELEASE_ID
+  )"
+  HC_RELEASE_DIR="$(
+    hc_backup_read_env "$actual_install_env" RELEASE_DIR
+  )"
+
+  if [[ ! "$HC_RELEASE_ID" =~ ^[0-9a-f]{40}$ ||
+        "$HC_RELEASE_DIR" != "/opt/hoaxconnect/releases/$HC_RELEASE_ID" ]]; then
+    hc_die "Restore release metadata is invalid."
+    return 1
+  fi
+
+  export HC_RELEASE_ID HC_RELEASE_DIR
 
   database="$(
     hc_backup_read_env \

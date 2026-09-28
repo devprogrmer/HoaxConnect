@@ -20,6 +20,7 @@ HC_MAINTENANCE_LOG_ROOT="/var/log/hoaxconnect"
 
 HC_DOMAIN=""
 HC_EMAIL=""
+HC_PUBLIC_IP=""
 HC_SOURCE_REF=""
 HC_ADMIN_ORIGIN=""
 HC_TLS_MODE="required"
@@ -44,6 +45,7 @@ Usage:
     --domain DOMAIN \
     --email EMAIL \
     --source-ref REF \
+    [--public-ip IPV4] \
     [--admin-origin HTTPS_ORIGIN] \
     [--staging-http] \
     [--dry-run]
@@ -52,6 +54,7 @@ Options:
   --domain          Public API and update hostname.
   --email           ACME account email address.
   --source-ref      Git commit, tag, or branch to export.
+  --public-ip       Public IPv4 for hosts behind outbound NAT.
   --admin-origin    One HTTPS Admin Panel origin.
   --staging-http    Use the staging TLS workflow.
   --dry-run         Validate and print the deployment plan only.
@@ -74,6 +77,13 @@ hc_install_parse_args() {
           hc_die "--email requires a value." ||
           return 1
         HC_EMAIL="$2"
+        shift 2
+        ;;
+      --public-ip)
+        [[ "$#" -ge 2 ]] ||
+          hc_die "--public-ip requires a value." ||
+          return 1
+        HC_PUBLIC_IP="$2"
         shift 2
         ;;
       --source-ref)
@@ -117,6 +127,25 @@ hc_install_parse_args() {
     return 1
   fi
 
+  if [[ -n "$HC_PUBLIC_IP" ]]; then
+    if [[ ! "$HC_PUBLIC_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+      hc_die "--public-ip must be a valid IPv4 address."
+      return 1
+    fi
+
+    local octet
+    local -a octets=()
+
+    IFS=. read -r -a octets <<<"$HC_PUBLIC_IP"
+
+    for octet in "${octets[@]}"; do
+      if ((10#$octet > 255)); then
+        hc_die "--public-ip must be a valid IPv4 address."
+        return 1
+      fi
+    done
+  fi
+
   if [[ -z "$HC_ADMIN_ORIGIN" ]]; then
     HC_ADMIN_ORIGIN="https://$HC_DOMAIN"
   fi
@@ -124,6 +153,7 @@ hc_install_parse_args() {
   export \
     HC_DOMAIN \
     HC_EMAIL \
+    HC_PUBLIC_IP \
     HC_SOURCE_REF \
     HC_ADMIN_ORIGIN \
     HC_TLS_MODE \
@@ -714,6 +744,7 @@ hc_install_write_metadata() {
 DOMAIN=$HC_DOMAIN
 ADMIN_ORIGIN=$HC_ADMIN_ORIGIN
 ACME_EMAIL=$HC_EMAIL
+PUBLIC_IP=$HC_PUBLIC_IP
 SOURCE_REF=$HC_SOURCE_REF
 RELEASE_ID=$HC_RELEASE_ID
 RELEASE_DIR=$HC_RELEASE_DIR

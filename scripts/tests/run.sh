@@ -15,6 +15,7 @@ tests=(
   "$HC_TEST_DIR/test-install-transaction.sh"
   "$HC_TEST_DIR/test-backup-restore.sh"
   "$HC_TEST_DIR/test-update.sh"
+  "$HC_TEST_DIR/test-status-uninstall.sh"
 )
 
 failures=0

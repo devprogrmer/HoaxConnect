@@ -110,6 +110,7 @@ hc_update_load_previous_state() {
     hc_update_read_env "$actual_install_env" ADMIN_ORIGIN
   )"
   HC_EMAIL="$(hc_update_read_env "$actual_install_env" ACME_EMAIL)"
+  HC_PUBLIC_IP="$(hc_update_read_env "$actual_install_env" PUBLIC_IP)"
   HC_TLS_MODE="$(hc_update_read_env "$actual_install_env" TLS_MODE)"
 
   HC_UPDATE_PREVIOUS_RELEASE_ID="$(
@@ -137,6 +138,7 @@ hc_update_load_previous_state() {
     HC_DOMAIN \
     HC_ADMIN_ORIGIN \
     HC_EMAIL \
+    HC_PUBLIC_IP \
     HC_TLS_MODE
 }
 
