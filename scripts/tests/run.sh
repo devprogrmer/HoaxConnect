@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+HC_TEST_DIR="$(
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &&
+  pwd -P
+)"
+
+tests=(
+  "$HC_TEST_DIR/test-common.sh"
+)
+
+failures=0
+
+for test_file in "${tests[@]}"; do
+  printf 'RUN: %s\n' "${test_file##*/}"
+
+  if ! bash "$test_file"; then
+    failures=$((failures + 1))
+  fi
+done
+
+if [[ "$failures" -ne 0 ]]; then
+  printf 'FAILED TEST FILES: %s\n' "$failures" >&2
+  exit 1
+fi
+
+printf 'ALL TEST FILES PASSED\n'
