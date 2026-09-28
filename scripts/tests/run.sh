@@ -10,6 +10,7 @@ tests=(
   "$HC_TEST_DIR/test-common.sh"
   "$HC_TEST_DIR/test-config.sh"
   "$HC_TEST_DIR/test-compose.sh"
+  "$HC_TEST_DIR/test-nginx.sh"
 )
 
 failures=0
