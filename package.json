@@ -14,7 +14,8 @@
     "dev:desktop": "concurrently -k \"npm run dev\" \"npm run electron\"",
     "build:ui": "tsc -b && vite build",
     "dist": "npm run build:ui && electron-builder",
-    "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never"
+    "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
+    "test:electron": "node --test electron/tests/*.test.cjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

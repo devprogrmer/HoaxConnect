@@ -173,6 +173,51 @@ Backend endpoint policy:
 - No production raw-IP endpoint.
 - Development local endpoint must be explicitly separate.
 
+ELECTRON PROTECTED AUTH FOUNDATION
+
+Status: implemented and locally verified, but not wired into the running
+Electron authentication flow yet.
+
+Completed:
+
+- Added fail-closed protected authentication storage using Electron safeStorage.
+- Added protected credential replacement and clearing, with controlled errors
+  for unavailable encryption, encryption/decryption failures, and corrupt data.
+- Added a Renderer-safe authentication state allowlist that excludes tokens,
+  passwords, and device private keys.
+- Added the `test:electron` package script.
+
+Verification:
+
+- `npm run test:electron`: 8 passed, 0 failed.
+- `npm run build`: passed.
+- `npm run lint`: 0 errors and 16 existing warnings.
+- Packaged Windows runtime testing has not been performed.
+
+Deployment and migration:
+
+- No production deployment was performed.
+- The Stage 2C migration remains unapplied to production.
+- Production Backend and database were not changed.
+
+Remaining work:
+
+- The protected store is not yet connected to Electron Main, preload, Renderer
+  login, Backend API requests, device-key generation, session restoration, or
+  refresh rotation.
+- Do not describe desktop authentication as operational until those flows and
+  the packaged Windows runtime are verified.
+
+Next starting point:
+
+- Add the Electron Main authentication owner and Backend API endpoint policy.
+- Generate and preserve device identity in Main and connect it to real
+  Electron safeStorage.
+- Expose only narrow typed authentication commands and sanitized state through
+  preload.
+- Preserve the existing scanner, split-tunnel, diagnostics, traffic,
+  network-doctor, and updater IPC behavior.
+
 EXPECTED NEXT IMPLEMENTATION ORDER
 
 1. Read-only Electron repository inspection.
