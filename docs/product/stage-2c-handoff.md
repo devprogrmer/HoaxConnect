@@ -3,11 +3,15 @@ Continue HoaxConnect Stage 2C from the public repository:
 https://github.com/devprogrmer/HoaxConnect
 
 Repository:
+
 - Branch: main
-- Expected HEAD:
-  d7514fc67c390c87fdf069accb55e782427f941e
-- Latest commit:
-  feat: secure refresh token rotation
+- Required implementation baseline:
+  `d7514fc67c390c87fdf069accb55e782427f941e`
+- The current HEAD may be newer because documentation-only commits can follow.
+- Verify the baseline before continuing:
+  `git merge-base --is-ancestor d7514fc67c390c87fdf069accb55e782427f941e HEAD`
+- Latest completed product-code slice:
+  `feat: secure refresh token rotation`
 
 PRODUCT MODEL
 
