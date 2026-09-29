@@ -43,6 +43,9 @@ const jwtAccessSecret = required("JWT_ACCESS_SECRET");
 const jwtIssuer = required("JWT_ISSUER");
 const jwtAudience = required("JWT_AUDIENCE");
 const refreshTokenPepper = required("REFRESH_TOKEN_PEPPER");
+const refreshRecoveryEncryptionKeyRaw = required(
+  "REFRESH_RECOVERY_ENCRYPTION_KEY"
+);
 
 if (jwtAccessSecret.length < 64) {
   throw new Error("JWT_ACCESS_SECRET must contain at least 64 characters");
@@ -50,6 +53,21 @@ if (jwtAccessSecret.length < 64) {
 
 if (refreshTokenPepper.length < 64) {
   throw new Error("REFRESH_TOKEN_PEPPER must contain at least 64 characters");
+}
+
+const refreshRecoveryEncryptionKey = Buffer.from(
+  refreshRecoveryEncryptionKeyRaw,
+  "base64"
+);
+
+if (
+  refreshRecoveryEncryptionKey.length !== 32 ||
+  refreshRecoveryEncryptionKey.toString("base64") !==
+    refreshRecoveryEncryptionKeyRaw
+) {
+  throw new Error(
+    "REFRESH_RECOVERY_ENCRYPTION_KEY must be exactly 32 bytes encoded as canonical base64"
+  );
 }
 
 const emailVerificationRequired = boolean(
@@ -78,6 +96,11 @@ export const config = Object.freeze({
   jwtIssuer,
   jwtAudience,
   refreshTokenPepper,
+  refreshRecoveryEncryptionKey,
+  refreshRecoveryTtlSeconds: integer(
+    "REFRESH_RECOVERY_TTL_SECONDS",
+    120
+  ),
   accessTokenTtlSeconds: integer("ACCESS_TOKEN_TTL_SECONDS", 600),
   refreshTokenTtlDays: integer("REFRESH_TOKEN_TTL_DAYS", 30),
 

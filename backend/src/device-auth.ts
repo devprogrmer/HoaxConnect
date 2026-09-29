@@ -47,6 +47,7 @@ type ChallengeRow = {
   id: string;
   user_id: string;
   device_id: string;
+  session_id: string | null;
   purpose: DeviceChallengePurpose;
   device_uid: string;
   key_fingerprint: string;
@@ -133,6 +134,7 @@ export async function issueDeviceChallenge(
   input: {
     userId: string;
     deviceId: string;
+    sessionId?: string | null;
     purpose: DeviceChallengePurpose;
     deviceUid: string;
     keyFingerprint: string;
@@ -151,6 +153,7 @@ export async function issueDeviceChallenge(
        id,
        user_id,
        device_id,
+       session_id,
        purpose,
        device_uid,
        key_fingerprint,
@@ -161,13 +164,14 @@ export async function issueDeviceChallenge(
        max_attempts
      )
      VALUES (
-       $1, $2, $3, $4::device_challenge_purpose, $5,
-       $6, $7, $8, $9, $10, $11
+       $1, $2, $3, $4, $5::device_challenge_purpose, $6,
+       $7, $8, $9, $10, $11, $12
      )`,
     [
       challengeId,
       input.userId,
       input.deviceId,
+      input.sessionId ?? null,
       input.purpose,
       input.deviceUid,
       input.keyFingerprint,

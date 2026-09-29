@@ -332,6 +332,7 @@ test_reinstall_preserves_backend_secrets() {
   local password_before
   local jwt_before
   local refresh_before
+  local recovery_key_before
 
   hc_run_apply >/dev/null 2>&1 || return 1
 
@@ -344,6 +345,12 @@ test_reinstall_preserves_backend_secrets() {
   refresh_before="$(
     sed -n 's/^REFRESH_TOKEN_PEPPER=//p' "$env_file"
   )"
+  recovery_key_before="$(
+    sed -n 's/^REFRESH_RECOVERY_ENCRYPTION_KEY=//p' "$env_file"
+  )"
+
+  test "${#recovery_key_before}" -eq 44
+  [[ "$recovery_key_before" =~ ^[A-Za-z0-9+/]{43}=$ ]]
 
   hc_run_apply >/dev/null 2>&1 || return 1
 
@@ -358,6 +365,10 @@ test_reinstall_preserves_backend_secrets() {
   hc_assert_equal \
     "$refresh_before" \
     "$(sed -n 's/^REFRESH_TOKEN_PEPPER=//p' "$env_file")"
+
+  hc_assert_equal \
+    "$recovery_key_before" \
+    "$(sed -n 's/^REFRESH_RECOVERY_ENCRYPTION_KEY=//p' "$env_file")"
 
   hc_transaction_cleanup
 }

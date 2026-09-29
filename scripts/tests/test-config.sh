@@ -108,6 +108,7 @@ test_reinstall_preserves_secrets_and_mode() {
   local first_password
   local first_jwt
   local first_pepper
+  local first_recovery_key
   local first_hash
   local second_hash
 
@@ -123,10 +124,15 @@ test_reinstall_preserves_secrets_and_mode() {
   first_pepper="$(
     sed -n 's/^REFRESH_TOKEN_PEPPER=//p' "$target"
   )"
+  first_recovery_key="$(
+    sed -n 's/^REFRESH_RECOVERY_ENCRYPTION_KEY=//p' "$target"
+  )"
 
   test "${#first_password}" -ge 64
   test "${#first_jwt}" -ge 64
   test "${#first_pepper}" -ge 64
+  test "${#first_recovery_key}" -eq 44
+  [[ "$first_recovery_key" =~ ^[A-Za-z0-9+/]{43}=$ ]]
 
   first_hash="$(sha256sum "$target" | awk '{print $1}')"
 
@@ -147,8 +153,16 @@ test_reinstall_preserves_secrets_and_mode() {
     "$first_pepper" \
     "$(sed -n 's/^REFRESH_TOKEN_PEPPER=//p' "$target")"
 
+  hc_assert_equal \
+    "$first_recovery_key" \
+    "$(sed -n 's/^REFRESH_RECOVERY_ENCRYPTION_KEY=//p' "$target")"
+
   if grep -Fq -- "$first_password" "$HC_TEMPLATE"; then
     hc_test_fail "tracked template contains a generated secret"
+  fi
+
+  if grep -Fq -- "$first_recovery_key" "$HC_TEMPLATE"; then
+    hc_test_fail "tracked template contains a generated recovery key"
   fi
 
   hc_config_cleanup

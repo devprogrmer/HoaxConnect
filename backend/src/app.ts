@@ -33,6 +33,10 @@ export async function buildApp() {
           "req.headers.authorization",
           "req.body.password",
           "req.body.refresh_token",
+          "req.body.recovery_secret",
+          "req.body.flow_token",
+          "req.body.nonce",
+          "req.body.signature",
           "res.headers.set-cookie"
         ],
         censor: "[REDACTED]"

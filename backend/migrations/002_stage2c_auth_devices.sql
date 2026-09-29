@@ -64,6 +64,8 @@ CREATE TABLE device_challenges (
     REFERENCES users(id) ON DELETE CASCADE,
   device_id uuid
     REFERENCES devices(id) ON DELETE CASCADE,
+  session_id uuid
+    REFERENCES sessions(id) ON DELETE CASCADE,
   purpose device_challenge_purpose NOT NULL,
   device_uid text NOT NULL,
   key_fingerprint char(64) NOT NULL,

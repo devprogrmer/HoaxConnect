@@ -12,6 +12,12 @@ import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError } from "./errors.js";
 import {
+  decryptRecoveryResponse,
+  encryptRecoveryResponse,
+  hashRecoverySecret,
+  recoverySecretMatches,
+} from "./refresh-recovery.js";
+import {
   prepareAuthDevice,
   type AuthDeviceRow,
 } from "./auth-devices.js";
@@ -59,8 +65,18 @@ const loginSchema = z.object({
   device: deviceSchema
 });
 
-const refreshSchema = z.object({
+const refreshChallengeSchema = z.object({
   refresh_token: z.string().min(40).max(1024)
+});
+
+const refreshRotationSchema = z.object({
+  refresh_token: z.string().min(40).max(1024),
+  challenge_id: z.string().uuid(),
+  flow_token: z.string().min(40).max(256),
+  nonce: z.string().min(40).max(256),
+  signature: z.string().min(80).max(256),
+  recovery_id: z.string().uuid(),
+  recovery_secret: z.string().min(40).max(256)
 });
 
 const deviceProofSchema = z.object({
@@ -108,6 +124,23 @@ type SessionRow = {
   refresh_token_hash: string;
   status: string;
   expires_at: Date;
+};
+
+type RefreshRecoveryRow = {
+  id: string;
+  session_family_id: string;
+  previous_session_id: string;
+  replacement_session_id: string;
+  device_id: string;
+  recovery_id: string;
+  recovery_secret_hash: string;
+  response_ciphertext: Buffer;
+  expires_at: Date;
+  consumed_at: Date | null;
+};
+
+type RefreshRotationResponse = {
+  tokens: Awaited<ReturnType<typeof createSession>>;
 };
 
 export interface AuthContext {
@@ -807,10 +840,169 @@ async function completeDeviceProof(
 }
 
 
+async function createRefreshChallenge(
+  request: FastifyRequest
+) {
+  const input = refreshChallengeSchema.parse(request.body);
+  const parsed = parseRefreshToken(input.refresh_token);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const sessionResult =
+      await client.query<SessionRow>(
+        `SELECT *
+         FROM sessions
+         WHERE id = $1
+         FOR UPDATE`,
+        [parsed.sessionId]
+      );
+
+    const session = sessionResult.rows[0];
+
+    if (
+      !session ||
+      !refreshHashMatches(
+        parsed.token,
+        session.refresh_token_hash
+      )
+    ) {
+      throw new ApiError(
+        401,
+        "INVALID_REFRESH_TOKEN",
+        "The refresh token is invalid."
+      );
+    }
+
+    if (session.status !== "active") {
+      throw new ApiError(
+        401,
+        "SESSION_INVALID",
+        "The refresh session is not active."
+      );
+    }
+
+    if (
+      new Date(session.expires_at).getTime() <=
+      Date.now()
+    ) {
+      throw new ApiError(
+        401,
+        "SESSION_EXPIRED",
+        "The refresh session has expired."
+      );
+    }
+
+    const userResult = await client.query<UserRow>(
+      `SELECT *
+       FROM users
+       WHERE id = $1
+       FOR UPDATE`,
+      [session.user_id]
+    );
+
+    const user = userResult.rows[0];
+
+    if (!user) {
+      throw new ApiError(
+        401,
+        "SESSION_INVALID",
+        "The refresh session is invalid."
+      );
+    }
+
+    assertUserCanAuthenticate(user);
+
+    const deviceResult =
+      await client.query<AuthDeviceRow>(
+        `SELECT *
+         FROM devices
+         WHERE id = $1
+           AND user_id = $2
+         FOR UPDATE`,
+        [session.device_id, session.user_id]
+      );
+
+    const device = deviceResult.rows[0];
+
+    if (!device) {
+      throw new ApiError(
+        401,
+        "SESSION_INVALID",
+        "The refresh session is invalid."
+      );
+    }
+
+    if (device.revoked_at) {
+      throw new ApiError(
+        403,
+        "DEVICE_REVOKED",
+        "This device has been revoked."
+      );
+    }
+
+    if (device.banned_at) {
+      throw new ApiError(
+        403,
+        "DEVICE_BANNED",
+        "This device is banned."
+      );
+    }
+
+    if (
+      !device.public_key_spki ||
+      !device.key_fingerprint
+    ) {
+      throw new ApiError(
+        401,
+        "DEVICE_PROOF_REQUIRED",
+        "The device must complete secure enrollment."
+      );
+    }
+
+    const proof = await issueDeviceChallenge(
+      client,
+      {
+        userId: user.id,
+        deviceId: device.id,
+        sessionId: session.id,
+        purpose: "refresh",
+        deviceUid: device.device_uid,
+        keyFingerprint: device.key_fingerprint,
+      }
+    );
+
+    await audit(
+      client,
+      request,
+      "auth.refresh_challenge",
+      "session",
+      session.id,
+      user.id,
+      user.role,
+      {
+        device_id: device.id,
+        challenge_id: proof.challenge_id,
+      }
+    );
+
+    await client.query("COMMIT");
+
+    return { proof };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
 async function rotateRefreshToken(
   request: FastifyRequest
 ) {
-  const input = refreshSchema.parse(request.body);
+  const input = refreshRotationSchema.parse(request.body);
   const parsed = parseRefreshToken(input.refresh_token);
   const client = await pool.connect();
 
@@ -845,6 +1037,86 @@ async function rotateRefreshToken(
     }
 
     if (session.status === "rotated") {
+      const recoveryResult =
+        await client.query<RefreshRecoveryRow>(
+          `SELECT *
+           FROM refresh_rotation_recoveries
+           WHERE previous_session_id = $1
+             AND recovery_id = $2
+           FOR UPDATE`,
+          [session.id, input.recovery_id]
+        );
+
+      const recovery = recoveryResult.rows[0];
+
+      if (
+        recovery &&
+        !recovery.consumed_at &&
+        new Date(recovery.expires_at).getTime() >
+          Date.now() &&
+        recovery.device_id === session.device_id &&
+        recovery.session_family_id ===
+          session.family_id &&
+        recoverySecretMatches(
+          recovery.recovery_secret_hash,
+          input.recovery_secret
+        )
+      ) {
+        const binding = {
+          recoveryId: recovery.recovery_id,
+          sessionFamilyId:
+            recovery.session_family_id,
+          previousSessionId:
+            recovery.previous_session_id,
+          replacementSessionId:
+            recovery.replacement_session_id,
+          deviceId: recovery.device_id,
+        };
+
+        const response =
+          decryptRecoveryResponse<RefreshRotationResponse>(
+            binding,
+            recovery.response_ciphertext
+          );
+
+        const consumed = await client.query(
+          `UPDATE refresh_rotation_recoveries
+           SET consumed_at = now()
+           WHERE id = $1
+             AND consumed_at IS NULL
+             AND expires_at > now()
+           RETURNING id`,
+          [recovery.id]
+        );
+
+        if (!consumed.rowCount) {
+          throw new ApiError(
+            401,
+            "REFRESH_RECOVERY_INVALID",
+            "Refresh recovery is invalid or expired."
+          );
+        }
+
+        await audit(
+          client,
+          request,
+          "auth.refresh_recovered",
+          "session",
+          recovery.replacement_session_id,
+          session.user_id,
+          null,
+          {
+            previous_session_id: session.id,
+            recovery_id: recovery.recovery_id,
+          }
+        );
+
+        await client.query("COMMIT");
+        committed = true;
+
+        return response;
+      }
+
       await client.query(
         `UPDATE sessions
          SET
@@ -864,7 +1136,10 @@ async function rotateRefreshToken(
         session.family_id,
         session.user_id,
         null,
-        { reused_session_id: session.id }
+        {
+          reused_session_id: session.id,
+          recovery_id: input.recovery_id,
+        }
       );
 
       await client.query("COMMIT");
@@ -876,64 +1151,118 @@ async function rotateRefreshToken(
         "SESSION_INVALID",
         "The refresh session is not active."
       );
-    } else if (new Date(session.expires_at).getTime() <= Date.now()) {
+    } else if (
+      new Date(session.expires_at).getTime() <=
+      Date.now()
+    ) {
       throw new ApiError(
         401,
         "SESSION_EXPIRED",
         "The refresh session has expired."
       );
     } else {
-      const accountResult = await client.query<
-        UserRow & {
-          device_id: string;
-          revoked_at: Date | null;
-        }
-      >(
-        `SELECT
-           u.*,
-           d.id AS device_id,
-           d.revoked_at
-         FROM users u
-         JOIN devices d ON d.id = $2
-         WHERE u.id = $1
+      const userResult = await client.query<UserRow>(
+        `SELECT *
+         FROM users
+         WHERE id = $1
          FOR UPDATE`,
-        [session.user_id, session.device_id]
+        [session.user_id]
       );
 
-      const account = accountResult.rows[0];
+      const user = userResult.rows[0];
 
-      if (
-        !account ||
-        account.status !== "active" ||
-        account.revoked_at
-      ) {
+      if (!user) {
         throw new ApiError(
           401,
           "SESSION_INVALID",
-          "The user or device is no longer active."
+          "The refresh session is invalid."
         );
       }
 
-      const device: DeviceRow = {
-        id: account.device_id,
-        user_id: account.id,
-        device_uid: "",
-        name: "",
-        os: "",
-        client_version: "",
-        first_seen_at: new Date(),
-        last_seen_at: new Date(),
-        revoked_at: account.revoked_at
-      };
+      assertUserCanAuthenticate(user);
+
+      const deviceResult =
+        await client.query<AuthDeviceRow>(
+          `SELECT *
+           FROM devices
+           WHERE id = $1
+             AND user_id = $2
+           FOR UPDATE`,
+          [session.device_id, session.user_id]
+        );
+
+      const device = deviceResult.rows[0];
+
+      if (!device) {
+        throw new ApiError(
+          401,
+          "SESSION_INVALID",
+          "The refresh session is invalid."
+        );
+      }
+
+      if (device.revoked_at) {
+        throw new ApiError(
+          403,
+          "DEVICE_REVOKED",
+          "This device has been revoked."
+        );
+      }
+
+      if (device.banned_at) {
+        throw new ApiError(
+          403,
+          "DEVICE_BANNED",
+          "This device is banned."
+        );
+      }
+
+      const verified = await verifyPendingDeviceProof(
+        client,
+        {
+          challengeId: input.challenge_id,
+          flowToken: input.flow_token,
+          nonce: input.nonce,
+          signature: input.signature,
+        }
+      );
+
+      if (!verified.ok) {
+        throw new ApiError(
+          401,
+          verified.code,
+          verified.message
+        );
+      }
+
+      if (
+        verified.challenge.purpose !== "refresh" ||
+        verified.challenge.user_id !== user.id ||
+        verified.challenge.device_id !== device.id ||
+        verified.challenge.session_id !== session.id
+      ) {
+        throw new ApiError(
+          401,
+          "INVALID_DEVICE_PROOF",
+          "The device proof is invalid or expired."
+        );
+      }
 
       const tokens = await createSession(
         client,
         request,
-        account,
+        user,
         device,
         session.family_id,
         new Date(session.expires_at),
         session.id
+      );
+
+      await client.query(
+        `UPDATE sessions
+         SET proof_verified_at = now()
+         WHERE id = $1`,
+        [tokens.sessionId]
       );
 
       await client.query(
@@ -947,26 +1276,79 @@ async function rotateRefreshToken(
         [session.id, tokens.sessionId]
       );
 
+      const response: RefreshRotationResponse = {
+        tokens,
+      };
+
+      const recoveryBinding = {
+        recoveryId: input.recovery_id,
+        sessionFamilyId: session.family_id,
+        previousSessionId: session.id,
+        replacementSessionId: tokens.sessionId,
+        deviceId: device.id,
+      };
+
+      const encryptedResponse =
+        encryptRecoveryResponse(
+          recoveryBinding,
+          response
+        );
+
+      await client.query(
+        `INSERT INTO refresh_rotation_recoveries (
+           session_family_id,
+           previous_session_id,
+           replacement_session_id,
+           device_id,
+           recovery_id,
+           recovery_secret_hash,
+           response_ciphertext,
+           expires_at
+         )
+         VALUES (
+           $1, $2, $3, $4, $5, $6, $7,
+           now() + ($8 * interval '1 second')
+         )`,
+        [
+          session.family_id,
+          session.id,
+          tokens.sessionId,
+          device.id,
+          input.recovery_id,
+          hashRecoverySecret(
+            input.recovery_secret
+          ),
+          encryptedResponse,
+          config.refreshRecoveryTtlSeconds,
+        ]
+      );
+
       await audit(
         client,
         request,
         "auth.refresh_rotated",
         "session",
         tokens.sessionId,
-        account.id,
-        account.role,
-        { replaced_session_id: session.id }
+        user.id,
+        user.role,
+        {
+          replaced_session_id: session.id,
+          challenge_id:
+            verified.challenge.id,
+          recovery_id: input.recovery_id,
+        }
       );
 
       await client.query("COMMIT");
       committed = true;
 
-      return { tokens };
+      return response;
     }
   } catch (error) {
     if (!committed) {
       await client.query("ROLLBACK");
     }
+
     throw error;
   } finally {
     client.release();
@@ -1231,6 +1613,21 @@ export async function registerAuthRoutes(
     },
     async (request) => ({
       data: await completeDeviceProof(request)
+    })
+  );
+
+  app.post(
+    "/api/v1/auth/refresh/challenge",
+    {
+      config: {
+        rateLimit: {
+          max: 12,
+          timeWindow: "1 minute"
+        }
+      }
+    },
+    async (request) => ({
+      data: await createRefreshChallenge(request)
     })
   );
 

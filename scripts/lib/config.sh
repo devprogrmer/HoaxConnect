@@ -144,6 +144,24 @@ hc_load_install_config() {
     HC_TLS_MODE
 }
 
+hc_generate_base64_key() {
+  local key
+
+  hc_require_command openssl || return 1
+
+  key="$(
+    openssl rand -base64 32 |
+      tr -d '\n'
+  )"
+
+  if [[ ! "$key" =~ ^[A-Za-z0-9+/]{43}=$ ]]; then
+    hc_die "Generated encryption key is not canonical base64."
+    return 1
+  fi
+
+  printf '%s\n' "$key"
+}
+
 hc_read_env_value() {
   local file="$1"
   local key="$2"
@@ -174,6 +192,23 @@ hc_existing_or_new_secret() {
   hc_generate_secret 48
 }
 
+hc_existing_or_new_base64_key() {
+  local file="$1"
+  local key="$2"
+  local value=""
+
+  if [[ -f "$file" ]]; then
+    value="$(hc_read_env_value "$file" "$key")"
+  fi
+
+  if [[ "$value" =~ ^[A-Za-z0-9+/]{43}=$ ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+
+  hc_generate_base64_key
+}
+
 hc_write_backend_env() {
   hc_load_install_config || return 1
 
@@ -182,6 +217,7 @@ hc_write_backend_env() {
   local postgres_password
   local jwt_secret
   local refresh_pepper
+  local refresh_recovery_key
 
   actual_file="$(hc_path "$HC_ENV_FILE")" || return 1
   actual_directory="$(dirname -- "$actual_file")"
@@ -207,12 +243,19 @@ hc_write_backend_env() {
       REFRESH_TOKEN_PEPPER
   )"
 
+  refresh_recovery_key="$(
+    hc_existing_or_new_base64_key \
+      "$actual_file" \
+      REFRESH_RECOVERY_ENCRYPTION_KEY
+  )"
+
   # The logging helper consumes this registered-secret array.
   # shellcheck disable=SC2034
   HC_SECRET_VALUES=(
     "$postgres_password"
     "$jwt_secret"
     "$refresh_pepper"
+    "$refresh_recovery_key"
   )
 
   hc_atomic_write "$HC_ENV_FILE" 0600 <<EOF
@@ -227,6 +270,8 @@ DATABASE_URL=postgresql://hoaxconnect:$postgres_password@postgres:5432/hoaxconne
 DATABASE_SSL=false
 JWT_ACCESS_SECRET=$jwt_secret
 REFRESH_TOKEN_PEPPER=$refresh_pepper
+REFRESH_RECOVERY_ENCRYPTION_KEY=$refresh_recovery_key
+REFRESH_RECOVERY_TTL_SECONDS=120
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 EMAIL_VERIFICATION_REQUIRED=false
