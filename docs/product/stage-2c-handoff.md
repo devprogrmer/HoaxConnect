@@ -193,6 +193,19 @@ EXPECTED NEXT IMPLEMENTATION ORDER
 
 WORKING RULES
 
+HANDOFF MAINTENANCE
+
+- Every product-code commit must update this Handoff in the same commit.
+- Do not use a later documentation-only commit to record product progress.
+- Each update must record the completed slice, exact verification performed,
+  deployment and migration state, remaining risks, and the next starting point.
+- Do not describe unverified behavior as completed.
+- Keep the required implementation baseline unchanged unless the architecture
+  baseline itself is intentionally replaced.
+- Before committing, verify that the staged files include this Handoff whenever
+  product code, migrations, configuration, Electron, or tests have changed.
+
+
 - Inspect actual files before patching.
 - Do not assume old file contents.
 - Preserve existing real features.
