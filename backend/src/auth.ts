@@ -11,6 +11,14 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError } from "./errors.js";
+import {
+  prepareAuthDevice,
+  type AuthDeviceRow,
+} from "./auth-devices.js";
+import {
+  issueDeviceChallenge,
+  verifyPendingDeviceProof,
+} from "./device-auth.js";
 
 import {
   createRefreshCredential,
@@ -26,11 +34,17 @@ const deviceSchema = z.object({
   uid: z.string().min(16).max(255),
   name: z.string().min(1).max(120),
   os: z.string().min(1).max(80),
-  client_version: z.string().min(1).max(40)
+  platform: z.string().min(1).max(80),
+  os_version: z.string().min(1).max(120),
+  architecture: z.string().min(1).max(40),
+  client_version: z.string().min(1).max(40),
+  public_key_spki: z.string().min(64).max(4096)
 });
 
 const registerSchema = z.object({
   email: z.string().email().max(320),
+  phone: z.string()
+    .regex(/^\+[1-9][0-9]{7,14}$/),
   username: z.string()
     .min(3)
     .max(64)
@@ -49,6 +63,13 @@ const refreshSchema = z.object({
   refresh_token: z.string().min(40).max(1024)
 });
 
+const deviceProofSchema = z.object({
+  challenge_id: z.string().uuid(),
+  flow_token: z.string().min(40).max(256),
+  nonce: z.string().min(40).max(256),
+  signature: z.string().min(80).max(256)
+});
+
 type UserRow = {
   id: string;
   email: string;
@@ -57,6 +78,13 @@ type UserRow = {
   role: string;
   status: string;
   email_verified_at: Date | null;
+  phone: string | null;
+  phone_normalized: string | null;
+  phone_verified_at: Date | null;
+  suspended_at: Date | null;
+  suspension_reason: string | null;
+  banned_at: Date | null;
+  ban_reason: string | null;
   auth_version: number;
 };
 
@@ -136,50 +164,6 @@ async function audit(
   );
 }
 
-async function upsertDevice(
-  client: PoolClient,
-  userId: string,
-  input: z.infer<typeof deviceSchema>
-): Promise<DeviceRow> {
-  const result = await client.query<DeviceRow>(
-    `INSERT INTO devices (
-       user_id,
-       device_uid,
-       name,
-       os,
-       client_version
-     )
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (user_id, device_uid)
-     DO UPDATE SET
-       name = EXCLUDED.name,
-       os = EXCLUDED.os,
-       client_version = EXCLUDED.client_version,
-       last_seen_at = now()
-     WHERE devices.revoked_at IS NULL
-     RETURNING *`,
-    [
-      userId,
-      input.uid,
-      input.name,
-      input.os,
-      input.client_version
-    ]
-  );
-
-  const device = result.rows[0];
-
-  if (!device) {
-    throw new ApiError(
-      403,
-      "DEVICE_REVOKED",
-      "This device has been revoked."
-    );
-  }
-
-  return device;
-}
-
 async function createSession(
   client: PoolClient,
   request: FastifyRequest,
@@ -241,11 +225,71 @@ function publicUser(user: UserRow) {
   return {
     id: user.id,
     email: user.email,
+    phone: user.phone,
     username: user.username,
     role: user.role,
     status: user.status,
-    email_verified: Boolean(user.email_verified_at)
+    email_verified: Boolean(user.email_verified_at),
+    phone_verified: Boolean(user.phone_verified_at)
   };
+}
+
+function publicDevice(device: AuthDeviceRow) {
+  return {
+    id: device.id,
+    device_uid: device.device_uid,
+    name: device.name,
+    os: device.os,
+    platform: device.platform,
+    os_version: device.os_version,
+    architecture: device.architecture,
+    client_version: device.client_version
+  };
+}
+
+function assertUserCanAuthenticate(
+  user: UserRow
+): void {
+  if (user.status === "suspended") {
+    throw new ApiError(
+      403,
+      "ACCOUNT_SUSPENDED",
+      user.suspension_reason ||
+        "This account is suspended."
+    );
+  }
+
+  if (user.status === "banned") {
+    throw new ApiError(
+      403,
+      "ACCOUNT_BANNED",
+      user.ban_reason ||
+        "This account is banned."
+    );
+  }
+
+  if (user.status !== "active") {
+    throw new ApiError(
+      403,
+      user.status === "pending_verification"
+        ? "EMAIL_VERIFICATION_REQUIRED"
+        : "ACCOUNT_UNAVAILABLE",
+      user.status === "pending_verification"
+        ? "Email verification is required."
+        : "This account is unavailable."
+    );
+  }
+
+  if (
+    config.emailVerificationRequired &&
+    !user.email_verified_at
+  ) {
+    throw new ApiError(
+      403,
+      "EMAIL_VERIFICATION_REQUIRED",
+      "Email verification is required."
+    );
+  }
 }
 
 export async function authenticate(
@@ -336,20 +380,26 @@ async function register(
       `INSERT INTO users (
          email,
          email_normalized,
+         phone,
+         phone_normalized,
          username,
          password_hash,
          status
        )
-       VALUES ($1, $2, $3, $4, $5::user_status)
+       VALUES (
+         $1, $2, $3, $4, $5, $6, $7::user_status
+       )
        RETURNING *`,
       [
         input.email.trim(),
         emailNormalized,
+        input.phone,
+        input.phone,
         input.username.trim(),
         passwordHash,
         config.emailVerificationRequired
           ? "pending_verification"
-          : "active"
+          : "active",
       ]
     );
 
@@ -359,25 +409,42 @@ async function register(
       throw new Error("User insert returned no row");
     }
 
-    const device = await upsertDevice(client, user.id, input.device);
+    const prepared = await prepareAuthDevice(
+      client,
+      request,
+      user.id,
+      input.device
+    );
 
-    let tokens = null;
-
-    if (!config.emailVerificationRequired) {
-      tokens = await createSession(client, request, user, device);
+    if (!prepared.ok) {
+      throw new Error(
+        "First device unexpectedly exceeded device limit"
+      );
     }
+
+    const proof = await issueDeviceChallenge(
+      client,
+      {
+        userId: user.id,
+        deviceId: prepared.device.id,
+        purpose: "enrollment",
+        deviceUid: prepared.device.device_uid,
+        keyFingerprint:
+          prepared.device.key_fingerprint,
+      }
+    );
 
     await audit(
       client,
       request,
-      "auth.register",
+      "auth.register_challenge",
       "user",
       user.id,
       user.id,
       user.role,
       {
-        email_verification_required:
-          config.emailVerificationRequired
+        device_id: prepared.device.id,
+        phone_verified: false,
       }
     );
 
@@ -385,15 +452,10 @@ async function register(
 
     return {
       user: publicUser(user),
-      device: {
-        id: device.id,
-        device_uid: device.device_uid,
-        name: device.name,
-        os: device.os,
-        client_version: device.client_version
-      },
-      verification_required: config.emailVerificationRequired,
-      tokens
+      device: publicDevice(prepared.device),
+      verification_required:
+        config.emailVerificationRequired,
+      proof,
     };
   } catch (error: unknown) {
     await client.query("ROLLBACK");
@@ -421,7 +483,8 @@ async function login(
   request: FastifyRequest
 ) {
   const input = loginSchema.parse(request.body);
-  const identifier = input.identifier.trim().toLowerCase();
+  const identifier =
+    input.identifier.trim().toLowerCase();
 
   const found = await pool.query<UserRow>(
     `SELECT *
@@ -434,7 +497,13 @@ async function login(
 
   const user = found.rows[0];
 
-  if (!user || !(await verifyPassword(user.password_hash, input.password))) {
+  if (
+    !user ||
+    !(await verifyPassword(
+      user.password_hash,
+      input.password
+    ))
+  ) {
     throw new ApiError(
       401,
       "INVALID_CREDENTIALS",
@@ -442,47 +511,232 @@ async function login(
     );
   }
 
-  if (user.status === "suspended") {
-    throw new ApiError(
-      403,
-      "ACCOUNT_SUSPENDED",
-      "This account is suspended."
-    );
-  }
-
-  if (user.status !== "active") {
-    throw new ApiError(
-      403,
-      user.status === "pending_verification"
-        ? "EMAIL_VERIFICATION_REQUIRED"
-        : "ACCOUNT_UNAVAILABLE",
-      user.status === "pending_verification"
-        ? "Email verification is required."
-        : "This account is unavailable."
-    );
-  }
-
-  if (
-    config.emailVerificationRequired &&
-    !user.email_verified_at
-  ) {
-    throw new ApiError(
-      403,
-      "EMAIL_VERIFICATION_REQUIRED",
-      "Email verification is required."
-    );
-  }
+  assertUserCanAuthenticate(user);
 
   const client = await pool.connect();
+  let committed = false;
 
   try {
     await client.query("BEGIN");
 
-    const device = await upsertDevice(
+    const lockedResult =
+      await client.query<UserRow>(
+        `SELECT *
+         FROM users
+         WHERE id = $1
+         FOR UPDATE`,
+        [user.id]
+      );
+
+    const lockedUser = lockedResult.rows[0];
+
+    if (
+      !lockedUser ||
+      !(await verifyPassword(
+        lockedUser.password_hash,
+        input.password
+      ))
+    ) {
+      throw new ApiError(
+        401,
+        "INVALID_CREDENTIALS",
+        "The username, email, or password is incorrect."
+      );
+    }
+
+    assertUserCanAuthenticate(lockedUser);
+
+    const prepared = await prepareAuthDevice(
       client,
-      user.id,
+      request,
+      lockedUser.id,
       input.device
     );
+
+    if (!prepared.ok) {
+      await audit(
+        client,
+        request,
+        "device.limit_exceeded",
+        "user",
+        lockedUser.id,
+        lockedUser.id,
+        lockedUser.role,
+        {
+          attempted_device_uid: input.device.uid,
+          effective_limit:
+            prepared.effectiveLimit,
+          active_device_count:
+            prepared.activeDeviceCount,
+        }
+      );
+
+      await client.query("COMMIT");
+      committed = true;
+
+      throw new ApiError(
+        403,
+        "DEVICE_LIMIT_EXCEEDED",
+        "The account device limit has been reached."
+      );
+    }
+
+    const proof = await issueDeviceChallenge(
+      client,
+      {
+        userId: lockedUser.id,
+        deviceId: prepared.device.id,
+        purpose: prepared.purpose,
+        deviceUid: prepared.device.device_uid,
+        keyFingerprint:
+          prepared.device.key_fingerprint,
+      }
+    );
+
+    await audit(
+      client,
+      request,
+      "auth.login_challenge",
+      "device",
+      prepared.device.id,
+      lockedUser.id,
+      lockedUser.role,
+      {
+        challenge_purpose: prepared.purpose,
+      }
+    );
+
+    await client.query("COMMIT");
+    committed = true;
+
+    return {
+      user: publicUser(lockedUser),
+      device: publicDevice(prepared.device),
+      proof,
+    };
+  } catch (error) {
+    if (!committed) {
+      await client.query("ROLLBACK");
+    }
+
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+
+async function completeDeviceProof(
+  request: FastifyRequest
+) {
+  const input = deviceProofSchema.parse(request.body);
+  const client = await pool.connect();
+  let committed = false;
+
+  try {
+    await client.query("BEGIN");
+
+    const verified = await verifyPendingDeviceProof(
+      client,
+      {
+        challengeId: input.challenge_id,
+        flowToken: input.flow_token,
+        nonce: input.nonce,
+        signature: input.signature,
+      }
+    );
+
+    if (!verified.ok) {
+      await client.query("COMMIT");
+      committed = true;
+
+      throw new ApiError(
+        401,
+        verified.code,
+        verified.message
+      );
+    }
+
+    if (
+      verified.challenge.purpose !== "enrollment" &&
+      verified.challenge.purpose !== "login"
+    ) {
+      throw new ApiError(
+        401,
+        "INVALID_DEVICE_PROOF",
+        "The device proof is invalid or expired."
+      );
+    }
+
+    const userResult = await client.query<UserRow>(
+      `SELECT *
+       FROM users
+       WHERE id = $1
+       FOR UPDATE`,
+      [verified.challenge.user_id]
+    );
+
+    const user = userResult.rows[0];
+
+    if (!user) {
+      throw new ApiError(
+        401,
+        "INVALID_DEVICE_PROOF",
+        "The device proof is invalid or expired."
+      );
+    }
+
+    assertUserCanAuthenticate(user);
+
+    const deviceResult =
+      await client.query<AuthDeviceRow>(
+        `SELECT *
+         FROM devices
+         WHERE id = $1
+           AND user_id = $2
+         FOR UPDATE`,
+        [
+          verified.challenge.device_id,
+          verified.challenge.user_id,
+        ]
+      );
+
+    const device = deviceResult.rows[0];
+
+    if (!device) {
+      throw new ApiError(
+        401,
+        "INVALID_DEVICE_PROOF",
+        "The device proof is invalid or expired."
+      );
+    }
+
+    if (device.revoked_at) {
+      throw new ApiError(
+        403,
+        "DEVICE_REVOKED",
+        "This device has been revoked."
+      );
+    }
+
+    if (device.banned_at) {
+      throw new ApiError(
+        403,
+        "DEVICE_BANNED",
+        "This device is banned."
+      );
+    }
+
+    if (
+      device.key_fingerprint !==
+      verified.challenge.key_fingerprint
+    ) {
+      throw new ApiError(
+        401,
+        "INVALID_DEVICE_PROOF",
+        "The device proof is invalid or expired."
+      );
+    }
 
     const tokens = await createSession(
       client,
@@ -492,41 +746,66 @@ async function login(
     );
 
     await client.query(
-      "UPDATE users SET last_login_at = now() WHERE id = $1",
+      `UPDATE sessions
+       SET proof_verified_at = now()
+       WHERE id = $1`,
+      [tokens.sessionId]
+    );
+
+    await client.query(
+      `UPDATE devices
+       SET
+         proof_verified_at = now(),
+         last_seen_at = now(),
+         updated_at = now()
+       WHERE id = $1`,
+      [device.id]
+    );
+
+    await client.query(
+      `UPDATE users
+       SET
+         last_login_at = now(),
+         updated_at = now()
+       WHERE id = $1`,
       [user.id]
     );
 
     await audit(
       client,
       request,
-      "auth.login",
+      "auth.device_proof_verified",
       "session",
       tokens.sessionId,
       user.id,
       user.role,
-      { device_id: device.id }
+      {
+        device_id: device.id,
+        challenge_id: verified.challenge.id,
+        challenge_purpose:
+          verified.challenge.purpose,
+      }
     );
 
     await client.query("COMMIT");
+    committed = true;
 
     return {
       user: publicUser(user),
-      device: {
-        id: device.id,
-        device_uid: device.device_uid,
-        name: device.name,
-        os: device.os,
-        client_version: device.client_version
-      },
-      tokens
+      device: publicDevice(device),
+      tokens,
     };
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (!committed) {
+      await client.query("ROLLBACK");
+    }
+
     throw error;
   } finally {
     client.release();
   }
 }
+
 
 async function rotateRefreshToken(
   request: FastifyRequest
@@ -937,6 +1216,21 @@ export async function registerAuthRoutes(
     },
     async (request) => ({
       data: await login(request)
+    })
+  );
+
+  app.post(
+    "/api/v1/auth/device-proof",
+    {
+      config: {
+        rateLimit: {
+          max: 12,
+          timeWindow: "1 minute"
+        }
+      }
+    },
+    async (request) => ({
+      data: await completeDeviceProof(request)
     })
   );
 
