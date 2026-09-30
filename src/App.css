@@ -2052,3 +2052,10 @@ button:disabled {
   vertical-align: -2px;
   background-size: cover;
 }
+
+.authError {
+  margin: 0 0 16px;
+  color: #ff8b8b;
+  font-size: 12px;
+  line-height: 1.5;
+}

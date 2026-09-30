@@ -4,9 +4,12 @@ const {
   ipcMain,
   dialog,
   session,
+  safeStorage,
 } = require("electron");
 
 const path = require("path");
+const { createElectronAuthOwner } = require("./auth/auth-owner.cjs");
+const { isTrustedAuthSender } = require("./auth/ipc-guard.cjs");
 
 const {
   pingHost,
@@ -473,6 +476,67 @@ function registerIPC() {
   );
 }
 
+function registerAuthIPC() {
+  const authOwner = createElectronAuthOwner({
+    safeStorage,
+    userDataPath: app.getPath("userData"),
+    isPackaged: app.isPackaged,
+    configuredBackendUrl:
+      process.env.HOAXCONNECT_BACKEND_URL || "",
+    deviceInfo: {
+      clientVersion: app.getVersion(),
+    },
+  });
+
+  function trusted(event) {
+    return isTrustedAuthSender(
+      event,
+      mainWindow,
+      app.isPackaged
+    );
+  }
+
+  function rejected() {
+    return {
+      ok: false,
+      error: {
+        code: "IPC_UNAUTHORIZED",
+        message: "Authentication request was rejected.",
+      },
+    };
+  }
+
+  ipcMain.handle("auth:get-state", async (event) => {
+    if (!trusted(event)) return rejected();
+    return await authOwner.getState();
+  });
+
+  ipcMain.handle("auth:login", async (event, input) => {
+    if (!trusted(event)) return rejected();
+    return await authOwner.login(input);
+  });
+
+  ipcMain.handle("auth:restore", async (event) => {
+    if (!trusted(event)) return rejected();
+    return await authOwner.restore();
+  });
+
+  ipcMain.handle("auth:register", async (event, input) => {
+    if (!trusted(event)) return rejected();
+    return await authOwner.register(input);
+  });
+
+  ipcMain.handle("auth:logout", async (event) => {
+    if (!trusted(event)) return rejected();
+    return await authOwner.logout();
+  });
+
+  ipcMain.handle("auth:logout-all", async (event) => {
+    if (!trusted(event)) return rejected();
+    return await authOwner.logoutAll();
+  });
+}
+
 function createWindow() {
   mainWindow =
     new BrowserWindow({
@@ -605,6 +669,7 @@ app.whenReady().then(() => {
     );
 
   registerIPC();
+  registerAuthIPC();
 
   registerUpdater();
 

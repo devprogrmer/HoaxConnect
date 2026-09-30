@@ -16,6 +16,46 @@ contextBridge.exposeInMainWorld(
         "app:get-version"
       ),
 
+    auth: {
+      getState() {
+        return ipcRenderer.invoke(
+          "auth:get-state"
+        );
+      },
+
+      login(input) {
+        return ipcRenderer.invoke(
+          "auth:login",
+          input
+        );
+      },
+
+      register(input) {
+        return ipcRenderer.invoke(
+          "auth:register",
+          input
+        );
+      },
+
+      restore() {
+        return ipcRenderer.invoke(
+          "auth:restore"
+        );
+      },
+
+      logout() {
+        return ipcRenderer.invoke(
+          "auth:logout"
+        );
+      },
+
+      logoutAll() {
+        return ipcRenderer.invoke(
+          "auth:logout-all"
+        );
+      },
+    },
+
     apps: {
       list() {
         return ipcRenderer.invoke(

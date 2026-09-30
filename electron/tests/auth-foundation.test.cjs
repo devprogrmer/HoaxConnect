@@ -522,3 +522,41 @@ test(
     );
   }
 );
+
+
+test(
+  "protected auth storage persists device identity before a refresh token exists",
+  () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "hoaxconnect-prelogin-")
+    );
+
+    const safeStorage = {
+      isEncryptionAvailable: () => true,
+      encryptString: (value) => Buffer.from(value, "utf8"),
+      decryptString: (value) => value.toString("utf8"),
+    };
+
+    const state = {
+      version: 1,
+      deviceUid: "device-identity-before-login",
+      devicePrivateKey: "protected-private-key",
+      refreshToken: null,
+    };
+
+    try {
+      const store = createProtectedAuthStore({
+        safeStorage,
+        userDataPath,
+      });
+
+      store.save(state);
+      assert.deepEqual(store.load(), state);
+    } finally {
+      fs.rmSync(userDataPath, {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+);

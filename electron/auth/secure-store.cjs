@@ -43,18 +43,46 @@ function requireEncryption(
 }
 
 function validateState(state) {
+  const pending = state && state.pendingRotation;
+  const pendingFields = [
+    "refresh_token",
+    "challenge_id",
+    "flow_token",
+    "nonce",
+    "signature",
+    "recovery_id",
+    "recovery_secret",
+  ];
+
   if (
     !state ||
     state.version !== 1 ||
-    typeof state.deviceUid !==
-      "string" ||
+    typeof state.deviceUid !== "string" ||
     !state.deviceUid ||
-    typeof state.devicePrivateKey !==
-      "string" ||
+    typeof state.devicePrivateKey !== "string" ||
     !state.devicePrivateKey ||
-    typeof state.refreshToken !==
-      "string" ||
-    !state.refreshToken
+    !(
+      state.refreshToken === null ||
+      (typeof state.refreshToken === "string" &&
+        state.refreshToken.length > 0)
+    ) ||
+    (pending !== undefined &&
+      pending !== null &&
+      (!pending ||
+        typeof pending !== "object" ||
+        pendingFields.some(
+          (field) =>
+            typeof pending[field] !== "string" ||
+            pending[field].length === 0
+        ))) ||
+    (state.user !== undefined &&
+      state.user !== null &&
+      (typeof state.user !== "object" ||
+        typeof state.user.id !== "string")) ||
+    (state.device !== undefined &&
+      state.device !== null &&
+      (typeof state.device !== "object" ||
+        typeof state.device.id !== "string"))
   ) {
     throw authError(
       "PROTECTED_STATE_INVALID",
@@ -62,15 +90,24 @@ function validateState(state) {
     );
   }
 
-  return {
+  const validated = {
     version: 1,
-    deviceUid:
-      state.deviceUid,
-    devicePrivateKey:
-      state.devicePrivateKey,
-    refreshToken:
-      state.refreshToken,
+    deviceUid: state.deviceUid,
+    devicePrivateKey: state.devicePrivateKey,
+    refreshToken: state.refreshToken,
   };
+
+  if (Object.prototype.hasOwnProperty.call(state, "pendingRotation")) {
+    validated.pendingRotation = pending || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(state, "user")) {
+    validated.user = state.user || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(state, "device")) {
+    validated.device = state.device || null;
+  }
+
+  return validated;
 }
 
 function createProtectedAuthStore({

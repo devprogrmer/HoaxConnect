@@ -279,16 +279,68 @@ function Login({
   onLogin: () => void;
   onModal: (modal: ModalType) => void;
 }) {
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  async function submit(event: FormEvent) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (loading) return;
+
     setLoading(true);
+    setError("");
 
-    await sleep(450);
+    const submittedPassword = password;
+    setPassword("");
 
-    setLoading(false);
-    onLogin();
+    try {
+      const auth = window.hoax?.auth;
+      if (!auth) {
+        setError("Authentication is available only in the HoaxConnect desktop app.");
+        return;
+      }
+
+      const result =
+        mode === "login"
+          ? await auth.login({
+              identifier: identifier.trim(),
+              password: submittedPassword,
+            })
+          : await auth.register({
+              email: email.trim(),
+              phone: phone.trim(),
+              username: username.trim(),
+              password: submittedPassword,
+            });
+
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+
+      if (result.state.status !== "authenticated") {
+        setError("Authentication could not be completed. Please try again.");
+        return;
+      }
+
+      onLogin();
+    } catch {
+      setError("Authentication could not be completed. Please try again.");
+    } finally {
+      setPassword("");
+      setLoading(false);
+    }
+  }
+
+  function switchMode(next: "login" | "register") {
+    setMode(next);
+    setError("");
+    setPassword("");
   }
 
   return (
@@ -301,7 +353,6 @@ function Login({
           <div className="brandIcon">
             <Zap size={25} strokeWidth={2.5} />
           </div>
-
           <div>
             <strong>HOAXCONNECT</strong>
             <span>GAMING NETWORK</span>
@@ -313,13 +364,11 @@ function Login({
             <Sparkles size={15} />
             SMART GAMING ROUTES
           </div>
-
           <h1>
             Play faster.
             <br />
             Route smarter.
           </h1>
-
           <p>
             Smart routing, low-latency gaming nodes and one-click secure
             connections.
@@ -327,83 +376,135 @@ function Login({
         </div>
 
         <div className="loginStats">
-          <div>
-            <Gauge />
-            <span>LOW LATENCY</span>
-          </div>
-
-          <div>
-            <Network />
-            <span>SMART ROUTING</span>
-          </div>
-
-          <div>
-            <ShieldCheck />
-            <span>SECURE</span>
-          </div>
+          <div><Gauge /><span>LOW LATENCY</span></div>
+          <div><Network /><span>SMART ROUTING</span></div>
+          <div><ShieldCheck /><span>SECURE</span></div>
         </div>
       </section>
 
       <section className="loginPanel">
         <form className="loginCard" onSubmit={submit}>
           <div className="loginHeader">
-            <span className="eyebrow">WELCOME BACK</span>
-            <h2>Sign in to HoaxConnect</h2>
+            <span className="eyebrow">
+              {mode === "login" ? "WELCOME BACK" : "NEW ACCOUNT"}
+            </span>
+            <h2>
+              {mode === "login"
+                ? "Sign in to HoaxConnect"
+                : "Create your account"}
+            </h2>
             <p>
-              Login is currently running in UI Test Mode. Real API auth comes
-              next.
+              {mode === "login"
+                ? "Sign in securely with your account and this device."
+                : "Your phone number is not verified until phone verification is available."}
             </p>
           </div>
 
-          <label className="inputGroup">
-            <span>USERNAME OR EMAIL</span>
-            <input defaultValue="demo" />
-          </label>
+          {mode === "login" ? (
+            <label className="inputGroup">
+              <span>USERNAME OR EMAIL</span>
+              <input
+                autoComplete="username"
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
+                required
+                minLength={3}
+                maxLength={320}
+              />
+            </label>
+          ) : (
+            <>
+              <label className="inputGroup">
+                <span>EMAIL</span>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  maxLength={320}
+                />
+              </label>
+              <label className="inputGroup">
+                <span>PHONE NUMBER</span>
+                <input
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="+12025550123"
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  required
+                  pattern="\+[1-9][0-9]{7,14}"
+                  title="Enter the number in international E.164 format."
+                />
+              </label>
+              <label className="inputGroup">
+                <span>USERNAME</span>
+                <input
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={64}
+                  pattern="[A-Za-z0-9_.\-]+"
+                />
+              </label>
+            </>
+          )}
 
           <label className="inputGroup">
             <span>PASSWORD</span>
-            <input type="password" defaultValue="demo123" />
+            <input
+              type="password"
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              minLength={mode === "login" ? 1 : 12}
+              maxLength={128}
+            />
           </label>
 
-          <div className="formOptions">
-            <label className="remember">
-              <input type="checkbox" defaultChecked />
-              Remember me
-            </label>
+          {error && (
+            <p className="authError" role="alert">
+              {error}
+            </p>
+          )}
 
-            <button
-              type="button"
-              className="linkButton"
-              onClick={() => onModal("forgot")}
-            >
-              Forgot password?
-            </button>
-          </div>
+          {mode === "login" && (
+            <div className="formOptions">
+              <span />
+              <button
+                type="button"
+                className="linkButton"
+                onClick={() => onModal("forgot")}
+                disabled={loading}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
 
           <button className="loginButton" disabled={loading}>
-            {loading ? "SIGNING IN..." : "SIGN IN"}
+            {loading
+              ? mode === "login" ? "SIGNING IN..." : "CREATING ACCOUNT..."
+              : mode === "login" ? "SIGN IN" : "CREATE ACCOUNT"}
             {!loading && <ChevronRight size={19} />}
           </button>
 
-          <div className="divider">
-            <span />
-            OR
-            <span />
-          </div>
-
-          <button
-            type="button"
-            className="buyAccess"
-            onClick={() => onModal("buy")}
-          >
-            <ShoppingBag size={19} />
-            BUY A SUBSCRIPTION
-          </button>
-
           <p className="loginFooter">
-            Don't have an account?{" "}
-            <button type="button" onClick={() => onModal("register")}>
-              Create one
+            {mode === "login"
+              ? "Don't have an account? "
+              : "Already have an account? "}
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() =>
+                switchMode(mode === "login" ? "register" : "login")
+              }
+            >
+              {mode === "login" ? "Create one" : "Sign in"}
             </button>
           </p>
         </form>
@@ -414,9 +515,97 @@ function Login({
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
+  const [authChecking, setAuthChecking] = useState(
+    Boolean(window.hoax?.auth)
+  );
   const [page, setPage] = useState<Page>("dashboard");
   const [modal, setModal] = useState<ModalType>(null);
   const [toast, setToast] = useState("");
+  const [logoutBusy, setLogoutBusy] = useState(false);
+
+  async function performSignOut(allDevices: boolean) {
+    if (logoutBusy) return;
+
+    const auth = window.hoax?.auth;
+    if (!auth) {
+      setLoggedIn(false);
+      setConnection("idle");
+      notify("Logged out on this device.");
+      return;
+    }
+
+    setLogoutBusy(true);
+    try {
+      const result = allDevices
+        ? await auth.logoutAll()
+        : await auth.logout();
+
+      if (!result.ok) {
+        notify(result.error.message);
+        return;
+      }
+
+      setLoggedIn(false);
+      setConnection("idle");
+
+      if (result.remoteRevoked) {
+        notify(
+          allDevices
+            ? "Signed out on all devices."
+            : "Signed out on this device."
+        );
+      } else {
+        notify(
+          "Signed out here, but the Backend could not confirm session revocation."
+        );
+      }
+    } catch {
+      notify("Sign-out could not be completed. Please try again.");
+    } finally {
+      setLogoutBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const auth = window.hoax?.auth;
+    if (!auth) return;
+    const authApi = auth;
+
+    let cancelled = false;
+
+    async function restoreSession() {
+      try {
+        const current = await authApi.getState();
+        if (!current.ok || cancelled) return;
+
+        if (current.state.status === "restore_required") {
+          const restored = await authApi.restore();
+          if (
+            restored.ok &&
+            restored.state.status === "authenticated" &&
+            !cancelled
+          ) {
+            setLoggedIn(true);
+          }
+        } else if (
+          current.state.status === "authenticated" &&
+          !cancelled
+        ) {
+          setLoggedIn(true);
+        }
+      } finally {
+        if (!cancelled) setAuthChecking(false);
+      }
+    }
+
+    void restoreSession().catch(() => {
+      if (!cancelled) setAuthChecking(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [selectedServerId, setSelectedServerId] = useState(SERVERS[0].id);
   const [results, setResults] = useState<Record<string, ServerResult>>({});
@@ -829,10 +1018,28 @@ export default function App() {
           </div>
 
           <button
+            type="button"
+            aria-label="Sign out on this device"
+            title="Sign out on this device"
+            disabled={logoutBusy}
+            onClick={() => void performSignOut(false)}
+          >
+            <LogOut size={17} />
+          </button>
+
+          <button
+            type="button"
+            aria-label="Sign out on all devices"
+            title="Sign out on all devices"
+            disabled={logoutBusy}
             onClick={() => {
-              setLoggedIn(false);
-              setConnection("idle");
-              notify("Logged out.");
+              if (
+                window.confirm(
+                  "Sign out on all devices? This will revoke every active session."
+                )
+              ) {
+                void performSignOut(true);
+              }
             }}
           >
             <LogOut size={17} />
@@ -1966,6 +2173,16 @@ export default function App() {
       default:
         return <Dashboard />;
     }
+  }
+
+  if (authChecking) {
+    return (
+      <main className="loginPage">
+        <section className="loginPanel">
+          <p role="status">Restoring your secure session...</p>
+        </section>
+      </main>
+    );
   }
 
   if (!loggedIn) {

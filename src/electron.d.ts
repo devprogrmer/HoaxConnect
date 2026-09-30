@@ -444,7 +444,76 @@ declare global {
     improved: boolean;
   }
 
+  interface HoaxAuthResult {
+    ok: true;
+    state: {
+      status: "authenticated" | "signed_out" | "restore_required";
+      user: {
+        id: string;
+        email: string;
+        phone: string | null;
+        username: string;
+        role: string;
+        status: string;
+        email_verified: boolean;
+        phone_verified: boolean;
+      } | null;
+      device: {
+        id: string;
+        device_uid: string;
+        name: string;
+        platform: string;
+        os_version: string;
+        architecture: string;
+        client_version: string;
+        revoked: boolean;
+        banned: boolean;
+      } | null;
+    };
+    verificationRequired?: boolean;
+  }
+
+  interface HoaxAuthFailure {
+    ok: false;
+    error: {
+      code: string;
+      message: string;
+    };
+  }
+
+  type HoaxAuthResponse = HoaxAuthResult | HoaxAuthFailure;
+
+  interface HoaxAuthSignOutSuccess {
+    ok: true;
+    state: HoaxAuthResult["state"];
+    remoteRevoked: boolean;
+    warning?: {
+      code: string;
+      message: string;
+    };
+  }
+
+  type HoaxAuthSignOutResponse =
+    | HoaxAuthSignOutSuccess
+    | HoaxAuthFailure;
+
   interface HoaxAPI {
+    auth: {
+      getState(): Promise<HoaxAuthResponse>;
+      login(input: {
+        identifier: string;
+        password: string;
+      }): Promise<HoaxAuthResponse>;
+      register(input: {
+        email: string;
+        phone: string;
+        username: string;
+        password: string;
+      }): Promise<HoaxAuthResponse>;
+      restore(): Promise<HoaxAuthResponse>;
+      logout(): Promise<HoaxAuthSignOutResponse>;
+      logoutAll(): Promise<HoaxAuthSignOutResponse>;
+    };
     isDesktop: boolean;
 
     platform: string;

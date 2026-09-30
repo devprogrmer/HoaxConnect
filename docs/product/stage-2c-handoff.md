@@ -173,68 +173,97 @@ Backend endpoint policy:
 - No production raw-IP endpoint.
 - Development local endpoint must be explicitly separate.
 
-ELECTRON PROTECTED AUTH FOUNDATION
+ELECTRON AUTHENTICATION STATUS
 
-Status: implemented and locally verified, but not wired into the running
-Electron authentication flow yet.
+Status: complete for the desktop authentication slice. The code and this
+checkpoint are being committed together; the Stage 2C Backend is deployed and
+the production migration is applied.
 
 Completed:
 
-- Added fail-closed protected authentication storage using Electron safeStorage.
-- Added protected credential replacement and clearing, with controlled errors
-  for unavailable encryption, encryption/decryption failures, and corrupt data.
-- Added a Renderer-safe authentication state allowlist that excludes tokens,
-  passwords, and device private keys.
-- Added the `test:electron` package script.
+- Protected storage uses Electron safeStorage and fails closed when encryption
+  is unavailable.
+- Main owns Backend calls, device identity, proof signing, access token memory,
+  protected refresh persistence, and refresh recovery.
+- Preload exposes guarded auth IPC for state, login, registration, session
+  restoration, local logout, and logout-all.
+- Renderer login and registration call the auth bridge; password state is
+  cleared immediately after submission and secrets are not returned by Main.
+- Startup attempts to restore a saved session. Before refresh rotation, Main
+  persists the exact retry payload, including recovery credentials, in
+  protected storage.
+- A simulated lost rotation response is retried with the same payload after
+  restoration; successful rotation replaces the saved refresh token and clears
+  pending recovery state.
+- Local logout and logout-all revoke through the Backend when possible, clear
+  local session credentials, and retain the protected device identity. An
+  unconfirmed remote revocation is reported to the user.
+- Unverified phone claims remain untrusted; Backend uniqueness applies only to
+  verified phone numbers, and phone login is not enabled.
+- Duplicate registration for an existing email or username is rejected; the
+  desktop reports that the user should sign in instead.
 
-Verification:
+Verification performed:
 
-- `npm run test:electron`: 8 passed, 0 failed.
+- `npm run test:electron`: 28 passed, 0 failed.
 - `npm run build`: passed.
-- `npm run lint`: 0 errors and 16 existing warnings.
-- Packaged Windows runtime testing has not been performed.
+- `npm --prefix backend run build`: passed.
+- `npm run lint`: 0 errors; 15 existing warnings remain.
+- `npm --prefix backend test` without a database: 10 passed, 0 failed, 13
+  database-dependent tests skipped.
+- Refresh restore test simulates a lost response and verifies the exact protected
+  request is retried.
+- Electron Auth Owner real-Backend integration test passed against isolated
+  PostgreSQL over loopback HTTP; registration, device proof, and refresh rotation
+  were exercised.
+- Packaged Windows app was manually verified against production: sign-in,
+  session restoration after app restart, and logout/re-login succeeded.
 
 Deployment and migration:
 
-- No production deployment was performed.
-- The Stage 2C migration remains unapplied to production.
-- Production Backend and database were not changed.
+- Production API was rebuilt from this repository's Stage 2C source and restarted
+  with the existing Docker Compose deployment.
+- `002_stage2c_auth_devices.sql` was applied to production; `001_initial.sql` was
+  already applied.
+- `https://hoaxnet.ir/api/v1/health/ready` returned ready after deployment.
+- A verified PostgreSQL backup was created on the production host before
+  migration.
+- Production-only JWT issuer, audience, and refresh-recovery key were configured
+  in `deploy/backend.env`; secret values are not stored in Git.
+
+Important connection boundary:
+
+- VPN connection is not implemented. `src/App.tsx` currently changes the
+  renderer state to `connected` after a simulated delay. No VPN provisioning
+  endpoint, node agent, or privileged Windows tunnel service is wired to it.
+- The app must not be described as connected to a real VPN until a real tunnel
+  is established and independently verified.
 
 Remaining work:
 
-- The protected store is not yet connected to Electron Main, preload, Renderer
-  login, Backend API requests, device-key generation, session restoration, or
-  refresh rotation.
-- Do not describe desktop authentication as operational until those flows and
-  the packaged Windows runtime are verified.
+- Complete and exercise suspended, banned, revoked-device, and email-verification
+  account/device policy flows.
+- Review recovery behavior if the one-time recovery response itself is lost;
+  keep Backend refresh-token reuse detection unchanged.
+- Implement real VPN control plane and node agent, followed by the Windows
+  privileged tunnel service, according to the product roadmap.
 
 Next starting point:
 
-- Add the Electron Main authentication owner and Backend API endpoint policy.
-- Generate and preserve device identity in Main and connect it to real
-  Electron safeStorage.
-- Expose only narrow typed authentication commands and sanitized state through
-  preload.
-- Preserve the existing scanner, split-tunnel, diagnostics, traffic,
-  network-doctor, and updater IPC behavior.
+- Authentication and production Stage 2C migration are verified; do not rerun
+  the production migration as routine work.
+- The user-visible priority is a real VPN connection. Start by designing the
+  Stage 5 Backend control plane and node agent, then Stage 6 Windows service.
+- Stage 3 SMS verification and Stage 4 plans/payments remain planned in the
+  roadmap; reconcile milestone sequencing before expanding scope.
+- Keep CONNECT explicitly marked as simulated until real tunnel verification.
 
-EXPECTED NEXT IMPLEMENTATION ORDER
+AUTHENTICATION SLICE EXIT CHECK
 
-1. Read-only Electron repository inspection.
-2. Report exact files and current fake/real boundaries.
-3. Add RED tests for protected storage and IPC boundaries.
-4. Implement secure device identity in Electron Main.
-5. Implement typed preload IPC.
-6. Implement real register/login flow.
-7. Implement device-challenge signing.
-8. Implement secure session persistence/restoration.
-9. Implement refresh challenge/rotation/crash recovery.
-10. Implement logout and logout-all.
-11. Implement banned, suspended and revoked-device states.
-12. Remove demo/demo123 and UI Test Mode.
-13. Run source tests.
-14. Run packaged Windows runtime tests.
-15. Do not deploy until separately approved.
+1. Desktop auth source tests/build pass and the packaged Windows flow was
+   manually verified.
+2. Production Stage 2C migration is applied and API health is ready.
+3. Real VPN tunnel is explicitly not implemented; see the boundary above.
 
 WORKING RULES
 
@@ -263,5 +292,6 @@ HANDOFF MAINTENANCE
 - Wait for real command output before continuing.
 - Never apply migrations to Production without explicit approval.
 
-START NOW WITH READ-ONLY ELECTRON INSPECTION ONLY.
-DO NOT MODIFY FILES YET.
+CURRENT CHECKPOINT: Stage 2C desktop authentication is committed with this
+Handoff update; production migration and packaged login/session/logout flows
+are verified. Real VPN connectivity remains unimplemented.
