@@ -1983,6 +1983,7 @@ async function listTraffic(
         page: query.page,
         page_size: query.pageSize,
         ...summary.rows[0],
+        total: Number(summary.rows[0]?.total ?? 0),
         range: { from, to },
         source: "traffic_usage accounting records",
       },

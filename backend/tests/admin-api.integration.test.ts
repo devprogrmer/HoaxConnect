@@ -15,6 +15,7 @@ let accountIds: string[] = [];
 let nodeIds: string[] = [];
 let userId = "";
 let roleEmails: Record<string, string> = {};
+let loginClientIp = 1;
 
 before(async () => {
   if (!databaseUrl) return;
@@ -108,10 +109,11 @@ function requestHeaders(extra: Record<string, string> = {}) {
 }
 
 async function login(role: string) {
+  const clientIp = `198.51.100.${loginClientIp++}`;
   const response = await app.inject({
     method: "POST",
     url: "/api/v1/admin/auth/login",
-    headers: requestHeaders(),
+    headers: requestHeaders({ "x-forwarded-for": clientIp }),
     payload: { email: roleEmails[role], password },
   });
 

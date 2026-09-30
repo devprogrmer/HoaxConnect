@@ -337,6 +337,11 @@ Verification performed in this checkout:
 - `npm --prefix backend test`: 17 passed, 0 failed, 22 skipped because no
   isolated PostgreSQL URL/service is available; skipped coverage includes all
   database-backed Admin acceptance tests.
+- The first isolated-PostgreSQL run on `68c0b13` executed all 39 Backend tests:
+  29 passed and 10 failed. The failures exposed a string-valued traffic count,
+  shared client IPs exhausting the test login rate limit, and a missing test-only
+  refresh recovery key. Fixes are on this branch; isolated database rerun is
+  still required.
 - `git diff --check`: passed.
 
 Not done in this checkout:
