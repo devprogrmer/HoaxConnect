@@ -202,15 +202,21 @@ Completed:
   verified phone numbers, and phone login is not enabled.
 - Duplicate registration for an existing email or username is rejected; the
   desktop reports that the user should sign in instead.
+- The desktop preserves one device key per installation. Backend device-key
+  uniqueness is now scoped to an account, allowing separate accounts to enroll
+  from the same installation after migration 003 is deployed.
 
 Verification performed:
 
 - `npm run test:electron`: 28 passed, 0 failed.
 - `npm run build`: passed.
 - `npm --prefix backend run build`: passed.
-- `npm run lint`: 0 errors; 15 existing warnings remain.
-- `npm --prefix backend test` without a database: 10 passed, 0 failed, 13
+- `npm run lint`: 0 errors; 16 existing warnings remain.
+- `npm --prefix backend test` without a database: 11 passed, 0 failed, 14
   database-dependent tests skipped.
+- Account-scoped device-key migration contract test passes. The real two-account
+  registration regression is database-dependent and skipped because no isolated
+  PostgreSQL instance is available in this checkout.
 - Refresh restore test simulates a lost response and verifies the exact protected
   request is retried.
 - Electron Auth Owner real-Backend integration test passed against isolated
@@ -225,6 +231,9 @@ Deployment and migration:
   with the existing Docker Compose deployment.
 - `002_stage2c_auth_devices.sql` was applied to production; `001_initial.sql` was
   already applied.
+- `003_account_scoped_device_keys.sql` is prepared but has not been applied to
+  production; until deployment, a second account from the same desktop install
+  can still be rejected because its device key fingerprint is already stored.
 - `https://hoaxnet.ir/api/v1/health/ready` returned ready after deployment.
 - A verified PostgreSQL backup was created on the production host before
   migration.
@@ -241,6 +250,9 @@ Important connection boundary:
 
 Remaining work:
 
+- Run the same-device multi-account registration regression against isolated
+  PostgreSQL, then apply migration 003 to production only after explicit approval
+  and a fresh verified database backup; rebuild/restart the API and verify health.
 - Complete and exercise suspended, banned, revoked-device, and email-verification
   account/device policy flows.
 - Review recovery behavior if the one-time recovery response itself is lost;
@@ -250,8 +262,12 @@ Remaining work:
 
 Next starting point:
 
-- Authentication and production Stage 2C migration are verified; do not rerun
-  the production migration as routine work.
+- The desktop-auth slice is deployed, but the account-scoped device-key fix is
+  not live until migration 003 is applied. Do not claim multi-account signup on
+  one installation works in production before that verification.
+- After explicit production-migration approval, back up the database, deploy
+  migration 003, rebuild/restart the API, and test two new accounts from one
+  desktop installation.
 - The user-visible priority is a real VPN connection. Start by designing the
   Stage 5 Backend control plane and node agent, then Stage 6 Windows service.
 - Stage 3 SMS verification and Stage 4 plans/payments remain planned in the
@@ -262,7 +278,8 @@ AUTHENTICATION SLICE EXIT CHECK
 
 1. Desktop auth source tests/build pass and the packaged Windows flow was
    manually verified.
-2. Production Stage 2C migration is applied and API health is ready.
+2. Production Stage 2C migrations 001 and 002 are applied and API health is
+   ready; migration 003 remains pending explicit approval and deployment.
 3. Real VPN tunnel is explicitly not implemented; see the boundary above.
 
 WORKING RULES
@@ -292,6 +309,8 @@ HANDOFF MAINTENANCE
 - Wait for real command output before continuing.
 - Never apply migrations to Production without explicit approval.
 
-CURRENT CHECKPOINT: Stage 2C desktop authentication is committed with this
-Handoff update; production migration and packaged login/session/logout flows
-are verified. Real VPN connectivity remains unimplemented.
+CURRENT CHECKPOINT: The account-registration failure was traced to a globally
+unique device-key fingerprint conflicting with the desktop's intentionally
+persistent installation identity. Migration 003 scopes that uniqueness per
+account; production deployment and isolated multi-account integration testing
+remain pending. Real VPN connectivity remains unimplemented.

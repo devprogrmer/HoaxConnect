@@ -265,6 +265,58 @@ test(
 );
 
 test(
+  "the same desktop identity can register separate accounts",
+  integrationOptions,
+  async () => {
+    const { publicKey: sharedPublicKey } =
+      generateKeyPairSync("ed25519");
+    const sharedPublicKeySpki = sharedPublicKey.export({
+      type: "spki",
+      format: "pem",
+    }).toString();
+    const sharedPublicKeyDer = sharedPublicKey.export({
+      type: "spki",
+      format: "der",
+    });
+    const sharedFingerprint = createHash("sha256")
+      .update(sharedPublicKeyDer)
+      .digest("hex");
+    const sharedDeviceUid = `stage2c-shared-${randomUUID()}`;
+
+    for (let account = 0; account < 2; account += 1) {
+      const suffix = randomUUID()
+        .replaceAll("-", "")
+        .slice(0, 20);
+      const phoneSuffix = String(
+        parseInt(suffix.slice(0, 7), 16) % 10_000_000
+      ).padStart(7, "0");
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/register",
+        payload: {
+          email: `same-device-${suffix}@example.test`,
+          phone: `+1555${phoneSuffix}`,
+          username: `same_device_${suffix}`,
+          password,
+          device: device(
+            sharedDeviceUid,
+            sharedPublicKeySpki
+          ),
+        },
+      });
+
+      assert.equal(response.statusCode, 201, response.body);
+      assertPendingProof(
+        response,
+        "enrollment",
+        sharedFingerprint
+      );
+    }
+  }
+);
+
+test(
   "known-device login returns login proof instead of tokens",
   integrationOptions,
   async () => {

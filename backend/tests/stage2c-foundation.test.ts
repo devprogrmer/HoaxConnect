@@ -21,6 +21,8 @@ process.env.JWT_AUDIENCE = "hoaxconnect-desktop";
 
 const migrationPath =
   new URL("../migrations/002_stage2c_auth_devices.sql", import.meta.url);
+const accountScopedDeviceMigrationPath =
+  new URL("../migrations/003_account_scoped_device_keys.sql", import.meta.url);
 
 test("Stage 2C migration exists", () => {
   assert.equal(
@@ -47,6 +49,23 @@ test("Stage 2C migration contains required auth contracts", () => {
   ]) {
     assert.match(sql, new RegExp(`\\b${marker}\\b`));
   }
+});
+
+test("device key uniqueness is scoped to each account", () => {
+  assert.equal(
+    existsSync(accountScopedDeviceMigrationPath),
+    true,
+    "003_account_scoped_device_keys.sql is required"
+  );
+
+  const sql = readFileSync(
+    accountScopedDeviceMigrationPath,
+    "utf8"
+  );
+
+  assert.match(sql, /DROP INDEX IF EXISTS devices_key_fingerprint_unique/i);
+  assert.match(sql, /UNIQUE INDEX devices_user_key_fingerprint_unique/i);
+  assert.match(sql, /ON devices\s*\(user_id,\s*key_fingerprint\)/i);
 });
 
 test("access tokens bind issuer and audience", async () => {
