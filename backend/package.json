@@ -12,6 +12,7 @@
     "test:watch": "node --import tsx --test --watch tests/*.test.ts",
     "dev": "tsx watch src/server.ts",
     "migrate": "node dist/migrate.js",
+    "admin:bootstrap": "node dist/admin-bootstrap.js",
     "start": "node dist/server.js",
     "smoke:auth": "node scripts/smoke-auth.mjs"
   },

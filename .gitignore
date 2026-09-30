@@ -5,6 +5,7 @@ node_modules/
 # JavaScript and TypeScript build output
 dist/
 dist-ssr/
+admin-dist/
 backend/dist/
 coverage/
 .vite/

@@ -13,6 +13,8 @@
     "electron": "wait-on http://localhost:5173 && electron .",
     "dev:desktop": "concurrently -k \"npm run dev\" \"npm run electron\"",
     "build:ui": "tsc -b && vite build",
+    "dev:admin": "vite --config admin/vite.config.ts",
+    "build:admin": "tsc -p admin/tsconfig.json && vite build --config admin/vite.config.ts",
     "dist": "npm run build:ui && electron-builder",
     "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
     "test:electron": "node --test electron/tests/*.test.cjs"

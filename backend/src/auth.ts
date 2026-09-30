@@ -1718,31 +1718,4 @@ export async function registerAuthRoutes(
     }
   );
 
-  app.get(
-    "/api/v1/admin/status",
-    async (request) => {
-      const auth = await authenticate(request);
-
-      if (
-        ![
-          "superadmin",
-          "admin",
-          "support",
-          "read_only"
-        ].includes(auth.role)
-      ) {
-        throw new ApiError(
-          403,
-          "ADMIN_ACCESS_REQUIRED",
-          "Administrative access is required."
-        );
-      }
-
-      throw new ApiError(
-        501,
-        "ADMIN_API_NOT_ENABLED",
-        "The administrative API is reserved but not enabled in Stage 2A."
-      );
-    }
-  );
 }

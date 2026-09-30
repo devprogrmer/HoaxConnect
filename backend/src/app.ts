@@ -6,6 +6,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 
 import { registerAuthRoutes } from "./auth.js";
+import { registerAdminRoutes } from "./admin.js";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError, installErrorHandlers } from "./errors.js";
@@ -49,7 +50,7 @@ export async function buildApp() {
   });
 
   await app.register(cors, {
-    credentials: false,
+    credentials: true,
     origin(origin, callback) {
       if (!origin) {
         callback(null, true);
@@ -99,6 +100,7 @@ export async function buildApp() {
   });
 
   await registerAuthRoutes(app);
+  await registerAdminRoutes(app);
 
   return app;
 }

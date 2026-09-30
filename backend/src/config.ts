@@ -77,6 +77,39 @@ const emailVerificationRequired = boolean(
 
 const emailProvider = process.env.EMAIL_PROVIDER?.trim() || "none";
 
+function origins(name: string): Set<string> {
+  return new Set(
+    (process.env[name] || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+}
+
+const nodeEnv = process.env.NODE_ENV?.trim() || "development";
+const corsAllowedOrigins = origins("CORS_ALLOWED_ORIGINS");
+const adminAllowedOrigins = origins("ADMIN_ALLOWED_ORIGINS");
+if (nodeEnv !== "production") {
+  adminAllowedOrigins.add("http://localhost:5174");
+  adminAllowedOrigins.add("http://127.0.0.1:5174");
+}
+const adminSecretEncryptionKeyRaw =
+  process.env.ADMIN_SECRET_ENCRYPTION_KEY?.trim() || "";
+let adminSecretEncryptionKey: Buffer | null = null;
+
+if (adminSecretEncryptionKeyRaw) {
+  const key = Buffer.from(adminSecretEncryptionKeyRaw, "base64");
+  if (
+    key.length !== 32 ||
+    key.toString("base64") !== adminSecretEncryptionKeyRaw
+  ) {
+    throw new Error(
+      "ADMIN_SECRET_ENCRYPTION_KEY must be exactly 32 bytes encoded as canonical base64",
+    );
+  }
+  adminSecretEncryptionKey = key;
+}
+
 if (emailVerificationRequired && emailProvider === "none") {
   throw new Error(
     "EMAIL_VERIFICATION_REQUIRED=true requires a real EMAIL_PROVIDER"
@@ -84,7 +117,7 @@ if (emailVerificationRequired && emailProvider === "none") {
 }
 
 export const config = Object.freeze({
-  nodeEnv: process.env.NODE_ENV?.trim() || "development",
+  nodeEnv,
   host: process.env.HOST?.trim() || "0.0.0.0",
   port: integer("PORT", 3100),
   logLevel: process.env.LOG_LEVEL?.trim() || "info",
@@ -108,10 +141,10 @@ export const config = Object.freeze({
   emailProvider,
   paymentProvider: process.env.PAYMENT_PROVIDER?.trim() || "none",
 
-  corsAllowedOrigins: new Set(
-    (process.env.CORS_ALLOWED_ORIGINS || "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-  )
+  corsAllowedOrigins: new Set([
+    ...corsAllowedOrigins,
+    ...adminAllowedOrigins,
+  ]),
+  adminAllowedOrigins,
+  adminSecretEncryptionKey,
 });
