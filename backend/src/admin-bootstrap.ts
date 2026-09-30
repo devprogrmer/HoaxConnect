@@ -69,12 +69,13 @@ export async function bootstrapFirstSuperadmin(
          request_id,
          metadata
        ) VALUES ($1, $2, 'superadmin', 'admin.bootstrap',
-                 'admin_account', $1, $3, $4::jsonb)`,
+                 'admin_account', $5, $3, $4::jsonb)`,
       [
         admin.id,
         admin.email,
         randomUUID(),
         JSON.stringify({ source: "local_one_time_bootstrap" }),
+        admin.id,
       ],
     );
 

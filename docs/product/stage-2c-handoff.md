@@ -340,13 +340,18 @@ Verification performed in this checkout:
 - The first isolated-PostgreSQL run on `68c0b13` executed all 39 Backend tests:
   29 passed and 10 failed. The failures exposed a string-valued traffic count,
   shared client IPs exhausting the test login rate limit, and a missing test-only
-  refresh recovery key. Fixes are on this branch; isolated database rerun is
-  still required.
+  refresh recovery key. After the fixes on `8f077e0`, the isolated database
+  rerun passed all 39 tests with no failures or skips.
+- On a fresh isolated database, migrations 001 through 004 applied. The
+  interactive superadmin bootstrap then exposed a PostgreSQL parameter-type
+  error in its audit insert. This branch fixes that insert and adds a
+  database-backed bootstrap regression test; its isolated rerun is pending.
 - `git diff --check`: passed.
 
 Not done in this checkout:
 
-- No Stage 2D migration was applied; migration 004 is local only.
+- Stage 2D migration 004 was applied only to disposable test databases, not
+  to Production.
 - No production database, API deployment, Nginx static hosting, or server files
   were changed.
 - Admin UI was not browser-verified here. Local PostgreSQL, Docker/Podman, and
@@ -355,8 +360,8 @@ Not done in this checkout:
 - SMS delivery/templates/logs, Admin MFA enrollment, VPN node agent, and real
   VPN connectivity remain unimplemented or unverified.
 
-Next gate: run the full Backend integration suite with
-`HC_STAGE2D_TEST_DATABASE_URL` pointing only to an isolated loopback PostgreSQL
-database whose name includes `test`. Then verify the Admin UI against that
-Backend. Do not apply migration 004 to Production until after review, explicit
-approval, and a verified database backup.
+Next gate: run the bootstrap regression test with `HC_STAGE2D_TEST_DATABASE_URL`
+pointing only to an isolated loopback PostgreSQL database whose name includes
+`test`. Then verify the Admin UI against that Backend. Do not apply migration
+004 to Production until after review, explicit approval, and a verified
+database backup.
