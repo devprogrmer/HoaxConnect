@@ -96,10 +96,23 @@ os.replace(temporary, path)
 PY
 nginx -t
 systemctl reload nginx
-curl -fsSk --noproxy '*' --max-time 10 \
-  --resolve hoaxnet.ir:443:127.0.0.1 \
-  https://hoaxnet.ir/updates/latest.yml -o "$BACKUP/https-before.yml"
-cmp -- "$FEED/latest.yml" "$BACKUP/https-before.yml"
+HTTPS_ROUTE_READY=0
+for attempt in {1..20}; do
+  if curl -fsSk --noproxy '*' --max-time 10 \
+    --resolve hoaxnet.ir:443:127.0.0.1 \
+    https://hoaxnet.ir/updates/latest.yml -o "$BACKUP/https-before.yml" \
+    2>"$BACKUP/https-route-error.log" && \
+    cmp -s -- "$FEED/latest.yml" "$BACKUP/https-before.yml"; then
+    HTTPS_ROUTE_READY=1
+    break
+  fi
+  sleep 1
+done
+if test "$HTTPS_ROUTE_READY" != 1; then
+  echo 'HTTPS update route did not serve the existing feed after Nginx reload' >&2
+  cat "$BACKUP/https-route-error.log" >&2
+  false
+fi
 
 for FILE in "$NAME" "$NAME.blockmap"; do
   if test -e "$FEED/$FILE"; then
