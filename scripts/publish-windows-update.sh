@@ -18,10 +18,10 @@ flock -n 9 || { echo 'An update publication is already running'; exit 1; }
 VERSION="$(node -p "require('./package.json').version")"
 test "$VERSION" = 0.3.10
 NAME="HoaxConnect-$VERSION-Setup.exe"
-FEED=/var/lib/hoaxconnect/updates
+FEED=/var/www/hoax-updates
 CONFIG="$(readlink -f /etc/nginx/sites-enabled/hoaxconnect-api-stage2a.conf)"
-test -s "$FEED/latest.yml"
-test -s "$CONFIG"
+test -s "$FEED/latest.yml" || { echo "Live update manifest is missing at $FEED" >&2; exit 1; }
+test -s "$CONFIG" || { echo 'HoaxConnect Nginx configuration is missing' >&2; exit 1; }
 RUN="$(date +%Y%m%d-%H%M%S)-$$"
 BACKUP="/root/hoaxconnect-windows-update-$RUN"
 umask 077
@@ -81,7 +81,7 @@ anchors = list(re.finditer(r'(?m)^[ \t]*listen 443 ssl;[^\n]*$', text))
 if len(anchors) != 1:
     raise SystemExit('Expected exactly one HTTPS server')
 location = '''    location ^~ /updates/ {
-        alias /var/lib/hoaxconnect/updates/;
+        alias /var/www/hoax-updates/;
         autoindex off;
         add_header Cache-Control "no-store" always;
         add_header X-Content-Type-Options "nosniff" always;

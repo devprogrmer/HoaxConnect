@@ -17,7 +17,7 @@ An operator transfers the archive to `/root/HoaxConnect-0.3.10-update.tar.gz`
 on the update host, then runs the tracked
 `scripts/publish-windows-update.sh` from a clean Stage 2F checkout updated to
 the publishing commit. The script verifies the archive and generated metadata,
-checks that `/var/lib/hoaxconnect/updates` actually backs the live 8090 feed,
+checks that `/var/www/hoax-updates` actually backs the live 8090 feed,
 backs up Nginx and `latest.yml`, and adds a separate HTTPS `/updates/` route.
 It copies the installer and blockmap first, verifies full downloads via both
 routes, then atomically replaces `latest.yml` last. A failed publication
