@@ -18,7 +18,8 @@
     "dist": "npm run build:ui && electron-builder",
     "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
     "test:electron": "node --test electron/tests/*.test.cjs",
-    "test:device-ui": "node --import ./backend/node_modules/tsx/dist/loader.mjs scripts/test-device-reporting.mjs"
+    "test:device-ui": "node --import ./backend/node_modules/tsx/dist/loader.mjs scripts/test-device-reporting.mjs",
+    "test:update-artifacts": "node --test scripts/tests/verify-windows-update.test.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
@@ -35,6 +36,7 @@
     "concurrently": "^10.0.5",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
+    "js-yaml": "^4.3.2",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
@@ -81,7 +83,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "http://194.26.64.55:8090/"
+        "url": "https://hoaxnet.ir/updates/"
       }
     ],
     "extraResources": [

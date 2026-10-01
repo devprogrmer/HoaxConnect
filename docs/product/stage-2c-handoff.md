@@ -409,9 +409,21 @@ Verification in this checkout:
   switches, hashed hardware/model/CPU/RAM, application names, report visibility,
   withdrawal and graceful-close state. Admin screenshots checked at 1440px and
   390px; no page overflow or browser runtime errors.
-- `npm run dist:win`: built the new 0.3.10 installer (not auto-published).
-  Packaged reporter/IPC code and traffic-helper source/package hashes checked.
-  Installer SHA-256: `93F2A3DEAA777B6EA29318E47E1E2888E6A63AB95511B779B89B80CB3FA4E042`.
+- `npm run dist:win`: rebuilt the 0.3.10 installer with an HTTPS update feed
+  for subsequent releases. Packaged reporter/IPC code and traffic-helper
+  source/package hashes checked. Installer SHA-256:
+  `86F9DD927593B5B0BEB02012C508647852CA44C21FA4B69BC7BF71BE87747436`.
+- The existing 0.3.9 client still checks the legacy HTTP port 8090, where
+  `latest.yml` continued to advertise 0.3.9 when checked. Version 0.3.10
+  cannot appear in-app until its installer, blockmap and metadata are
+  published to that feed. The release archive is local, not committed.
+- `npm run test:update-artifacts`: 4 passed; the release artifact verifier also
+  passed on the actual installer. The publication script passed Bash syntax
+  checking but has not run on the production update host yet.
+- Neither version has an Authenticode signature. The old HTTP metadata path
+  cannot be made tamper-proof from a 0.3.10 code change; this is a one-time
+  bootstrap risk. The new build uses HTTPS, but signed artifacts and signed
+  metadata remain release-readiness work.
 - `scripts/deploy-device-reports.sh`: Bash syntax checked, not run on production
   in this turn. Preserves credentials/volume, creates a checked dump, builds
   before API replacement, verifies migration/health/static assets, and restores
