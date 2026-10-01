@@ -8,8 +8,10 @@ test -s "$ARCHIVE"
 REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$REPO"
 test "$REPO" != /opt/HoaxConnect
-for tool in node python3 nginx curl flock sha512sum; do command -v "$tool" >/dev/null; done
+for tool in node python3 nginx curl flock sha256sum sha512sum; do command -v "$tool" >/dev/null; done
 test -d node_modules/js-yaml
+test "$(sha256sum "$ARCHIVE" | cut -d' ' -f1)" = \
+  913ba2e7574cc41f7b69e66505d38b3611202b97e0cf50adf4381c45103f7660
 exec 9>/run/hoaxconnect-windows-update.lock
 flock -n 9 || { echo 'An update publication is already running'; exit 1; }
 

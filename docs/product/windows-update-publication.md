@@ -9,6 +9,7 @@ The release archive at `.tmp/HoaxConnect-0.3.10-update.tar.gz` contains only
 the installer, its blockmap and electron-builder's `latest.yml`. It must not
 be committed to Git. Its SHA-256 is
 `913BA2E7574CC41F7B69E66505D38B3611202B97E0CF50ADF4381C45103F7660`.
+The publication script requires this exact archive hash before extraction.
 The installer SHA-256 is
 `86F9DD927593B5B0BEB02012C508647852CA44C21FA4B69BC7BF71BE87747436`.
 
