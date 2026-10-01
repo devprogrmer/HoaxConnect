@@ -278,3 +278,14 @@ td small { max-width: 280px; margin-top: 4px; color: #929e98; font-size: 9px; ov
   .modal-actions { flex-wrap: wrap; }
   .modal-actions button { flex: 1; }
 }
+.device-reports { margin-top: 18px; padding: 18px 0; }
+.device-report { border-top: 1px solid #dde6e1; padding: 12px 0; }
+.device-report summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.device-report summary strong { overflow-wrap: anywhere; }
+.device-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 18px 0 0; }
+.device-report-grid dt { color: #65716b; font-size: 11px; margin-bottom: 5px; }
+.device-report-grid dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.device-report-grid small { display: block; color: #65716b; margin-top: 5px; }
+.device-report-grid code { font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+.device-report-wide { grid-column: 1 / -1; }
+@media (max-width: 600px) { .device-report-grid { grid-template-columns: minmax(0, 1fr); } }

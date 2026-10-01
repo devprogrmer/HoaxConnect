@@ -1,7 +1,7 @@
 {
   "name": "hoaxconnect",
   "private": true,
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Windows gaming network diagnostics and VPN client",
   "author": "HoaxConnect",
   "type": "module",
@@ -17,7 +17,8 @@
     "build:admin": "tsc -p admin/tsconfig.json && vite build --config admin/vite.config.ts",
     "dist": "npm run build:ui && electron-builder",
     "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
-    "test:electron": "node --test electron/tests/*.test.cjs"
+    "test:electron": "node --test electron/tests/*.test.cjs",
+    "test:device-ui": "node --import ./backend/node_modules/tsx/dist/loader.mjs scripts/test-device-reporting.mjs"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

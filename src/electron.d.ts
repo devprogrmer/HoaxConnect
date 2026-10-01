@@ -497,7 +497,14 @@ declare global {
     | HoaxAuthSignOutSuccess
     | HoaxAuthFailure;
 
+  interface HoaxReportingPermissions { hardware: boolean; network: boolean; applications: boolean; }
+  type HoaxReportingResponse = { ok: true; permissions: HoaxReportingPermissions; lastSentAt: string | null } | HoaxAuthFailure;
+
   interface HoaxAPI {
+    reporting: {
+      getSettings(): Promise<HoaxReportingResponse>;
+      setPermissions(permissions: HoaxReportingPermissions): Promise<HoaxReportingResponse>;
+    };
     auth: {
       getState(): Promise<HoaxAuthResponse>;
       login(input: {

@@ -24,9 +24,10 @@ exposed to users.
 
 CURRENT STAGE
 
-Stage 2D Admin API + Stage 2E React Admin Control Center.
-The Admin implementation is local and has not passed isolated database
-acceptance or deployment verification.
+Stage 2F client presence and opt-in device reporting.
+Stage 2D API deployment and migration 004 are confirmed by the user's server
+output. The latest local verification/deployment boundaries are recorded in
+the Stage 2F checkpoint below; earlier checkpoints are historical evidence.
 
 COMPLETED AND PUSHED
 
@@ -310,7 +311,7 @@ HANDOFF MAINTENANCE
 - Wait for real command output before continuing.
 - Never apply migrations to Production without explicit approval.
 
-STAGE 2D/2E LOCAL CHECKPOINT
+STAGE 2D/2E HISTORICAL LOCAL CHECKPOINT (SUPERSEDED BELOW)
 
 Implemented locally:
 
@@ -365,3 +366,81 @@ pointing only to an isolated loopback PostgreSQL database whose name includes
 `test`. Then verify the Admin UI against that Backend. Do not apply migration
 004 to Production until after review, explicit approval, and a verified
 database backup.
+
+STAGE 2F CLIENT REPORTING CHECKPOINT - 2026-10-01
+
+Completed in branch `codex/stage-2f-client-presence`:
+
+- Account ID, installation ID, signing-key fingerprint and client-reported
+  SHA-256 hardware ID are separate fields. Hardware IDs are not attestation
+  and are not used to bypass device proof or enforce account ownership.
+- Electron sends authenticated presence every 30 seconds. The Admin account
+  detail distinguishes online, graceful close, inactive session, missing
+  reports, and no recent contact after 90 seconds. It polls every 20 seconds.
+- Hardware/model/CPU/RAM, network diagnostics, and visible-window application
+  names are separate opt-ins, off by default. Window titles, file paths,
+  command lines, raw firmware IDs and browsing history are not sent.
+- Reports are session/device-bound on the server, limited in size/rate, and
+  contain a server-observed IP, never a client-supplied IP. Only exact
+  `TRUSTED_PROXY_IPS` can supply forwarded client addresses.
+- Optional values are removed on the next successful withdrawal report.
+  Only the latest report is stored. Reports older than 24 hours are hidden;
+  an hourly/startup sweep removes expired rows (physical retention up to 25h).
+- Sensitive report values require `telemetry.read` (admin/superadmin). Reads
+  remain audited. Banned devices cannot authenticate for client APIs.
+- The auth owner serializes rotation/login/logout/reporting and refreshes an
+  expired access token once. Reports collected for another account are dropped.
+- Network availability and Backend request time are measured, not a speed test,
+  packet-loss/jitter measurement, VPN health claim, or proof of global Internet
+  reachability. Missing heartbeats cannot distinguish a crash from lost access.
+
+Verification in this checkout:
+
+- Electron tests: 33 passed, 0 failed.
+- Full Backend suite against isolated local PostgreSQL 16.14: 52 passed,
+  0 failed, 0 skipped. Migrations 001 through 005 applied. The disposable
+  database was bound to loopback; no production data was used.
+- Regression coverage includes spoofed IP/IDs, consent withdrawal, role
+  redaction, expiry/purge, banned devices, refresh rotation and account changes.
+- `npm run build`, `npm run build:admin`, Backend build: passed.
+- Lint: 0 errors, 16 pre-existing desktop warnings; no new report-code warnings.
+- `npm run test:device-ui`: passed using real Electron/Windows collectors,
+  a disposable local account and real isolated Backend. Verified Settings
+  switches, hashed hardware/model/CPU/RAM, application names, report visibility,
+  withdrawal and graceful-close state. Admin screenshots checked at 1440px and
+  390px; no page overflow or browser runtime errors.
+- `npm run dist:win`: built the new 0.3.10 installer (not auto-published).
+  Packaged reporter/IPC code and traffic-helper source/package hashes checked.
+  Installer SHA-256: `93F2A3DEAA777B6EA29318E47E1E2888E6A63AB95511B779B89B80CB3FA4E042`.
+- `scripts/deploy-device-reports.sh`: Bash syntax checked, not run on production
+  in this turn. Preserves credentials/volume, creates a checked dump, builds
+  before API replacement, verifies migration/health/static assets, and restores
+  the old image/config on failure without destructive database rollback.
+
+Production evidence supplied by the user before this change:
+
+- Migration ledger contained 001, 002 and 003; migration 004 then applied.
+- Image `hoaxconnect-api:stage2d-6b30924` passed the nonroot runtime file check
+  and became healthy. A fresh dump exists under
+  `/root/hoaxconnect-stage2d-20260930-151912-1293261/retry-IzgQU8.dump`.
+- The one-time production superadmin was created successfully. Do not rerun
+  bootstrap, rotate existing encryption keys, or overwrite the dirty original
+  checkout at `/opt/HoaxConnect`.
+- The first Admin static publish got a 404 and rolled back; a retry was supplied
+  but no definitive production static-byte check was received in this thread.
+
+Not yet verified / next starting point:
+
+- Migration 005, the updated Admin assets and new client are NOT deployed to
+  production by this local work. Run the opt-in deployment script from a clean
+  release clone, retain its backup and Compose override path, then verify normal
+  external HTTPS and real device reports at `https://hoaxnet.ir/admin/`.
+- The new installer was built and its content inspected; installation/upgrading
+  the user's existing app and packaged production end-to-end reporting remain
+  unverified. Source Electron runtime is not an installer upgrade test.
+- Old clients have no report sender and must show "No app reports", not offline
+  or invented hardware values. Existing proxy IP history cannot be recovered.
+- See `docs/product/client-device-reporting.md` for consent, validation,
+  deployment and rollback boundaries.
+- Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
+  remain outside this slice and must not be described as implemented.

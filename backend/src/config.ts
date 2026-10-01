@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { isIP } from "node:net";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -87,6 +88,11 @@ function origins(name: string): Set<string> {
 }
 
 const nodeEnv = process.env.NODE_ENV?.trim() || "development";
+const trustedProxyIps = (process.env.TRUSTED_PROXY_IPS || "127.0.0.1,::1")
+  .split(",").map((value) => value.trim()).filter(Boolean);
+if (trustedProxyIps.some((value) => !isIP(value))) {
+  throw new Error("TRUSTED_PROXY_IPS must contain comma-separated IP addresses");
+}
 const corsAllowedOrigins = origins("CORS_ALLOWED_ORIGINS");
 const adminAllowedOrigins = origins("ADMIN_ALLOWED_ORIGINS");
 if (nodeEnv !== "production") {
@@ -118,6 +124,7 @@ if (emailVerificationRequired && emailProvider === "none") {
 
 export const config = Object.freeze({
   nodeEnv,
+  trustedProxyIps,
   host: process.env.HOST?.trim() || "0.0.0.0",
   port: integer("PORT", 3100),
   logLevel: process.env.LOG_LEVEL?.trim() || "info",

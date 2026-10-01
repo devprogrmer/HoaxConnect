@@ -33,6 +33,7 @@ import {
 import "./App.css";
 import NetworkDoctor from "./NetworkDoctor";
 import SplitTunnel from "./SplitTunnel";
+import DeviceReportingSettings from "./DeviceReportingSettings";
 import {
   nativeAvailable,
   nativeDiagnostic,
@@ -2025,6 +2026,7 @@ export default function App() {
     return (
       <>
         <PageHeader eyebrow="PREFERENCES" title="Settings" />
+        <DeviceReportingSettings />
 
         <div className="settingsGrid">
           <article className="genericCard">

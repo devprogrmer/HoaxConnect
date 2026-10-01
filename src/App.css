@@ -2059,3 +2059,9 @@ button:disabled {
   font-size: 12px;
   line-height: 1.5;
 }
+ .device-reporting-settings { margin-bottom: 24px; border-bottom: 1px solid #29333b; padding-bottom: 20px; }
+ .device-reporting-settings p { color: #a7b4bc; font-size: 13px; line-height: 1.5; }
+ .device-reporting-settings fieldset { border: 0; padding: 0; margin: 0; }
+ .device-reporting-settings .settingRow > span { display: grid; gap: 5px; min-width: 0; }
+ .device-reporting-settings .settingRow > span > span { color: #a7b4bc; font-size: 12px; line-height: 1.5; }
+ .device-reporting-settings input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #63dbaa; }

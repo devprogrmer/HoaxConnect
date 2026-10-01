@@ -1793,16 +1793,37 @@ async function getUserDetail(
   const [devices, sessions, subscriptions, payments, audit] =
     await Promise.all([
       pool.query(
-        `SELECT id, device_uid, name, os, platform, os_version,
-                architecture, client_version, first_seen_at, last_seen_at,
-                revoked_at, revoke_reason, banned_at, ban_reason
-         FROM devices WHERE user_id = $1 ORDER BY last_seen_at DESC`,
-        [userId],
+        `SELECT d.id, d.device_uid, d.name, d.os, d.platform, d.os_version,
+                d.architecture, d.client_version, d.first_seen_at, d.last_seen_at,
+                d.revoked_at, d.revoke_reason, d.banned_at, d.ban_reason, d.key_fingerprint,
+                r.received_at AS report_received_at,
+                CASE WHEN $2::boolean THEN host(r.ip_address) END AS reported_ip,
+                CASE WHEN r.device_id IS NULL THEN 'not_reported'
+                     WHEN d.revoked_at IS NOT NULL OR d.banned_at IS NOT NULL
+                       OR s.status <> 'active' OR s.expires_at <= now() OR u.status <> 'active'
+                       THEN 'session_inactive'
+                     WHEN r.app_state = 'closed' THEN 'closed'
+                     WHEN r.received_at < now() - interval '90 seconds' THEN 'not_reporting'
+                     ELSE 'online' END AS presence,
+                CASE WHEN $2::boolean THEN r.permissions END AS report_permissions,
+                $2::boolean AS report_details_allowed,
+                CASE WHEN $2::boolean THEN r.hardware END AS hardware,
+                CASE WHEN $2::boolean THEN r.network END AS network,
+                CASE WHEN $2::boolean AND r.received_at >= now() - interval '90 seconds'
+                     AND r.app_state = 'running' AND s.status = 'active' AND s.expires_at > now()
+                     AND d.revoked_at IS NULL AND d.banned_at IS NULL AND u.status = 'active'
+                     THEN r.applications END AS applications
+         FROM devices d JOIN users u ON u.id = d.user_id
+         LEFT JOIN client_device_reports r ON r.device_id = d.id
+           AND r.received_at >= now() - interval '24 hours'
+         LEFT JOIN sessions s ON s.id = r.session_id
+         WHERE d.user_id = $1 ORDER BY d.last_seen_at DESC`,
+        [userId, hasAdminPermission(admin.role, "telemetry.read")],
       ),
       pool.query(
         `SELECT s.id, s.family_id, s.device_id, d.name AS device_name,
                 s.status::text AS status, s.issued_at, s.last_used_at,
-                s.expires_at, s.revoked_at, s.revoke_reason
+                s.expires_at, s.revoked_at, s.revoke_reason, host(s.ip_address) AS ip_address
          FROM sessions s JOIN devices d ON d.id = s.device_id
          WHERE s.user_id = $1 ORDER BY s.issued_at DESC LIMIT 100`,
         [userId],

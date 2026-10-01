@@ -56,6 +56,11 @@ contextBridge.exposeInMainWorld(
       },
     },
 
+    reporting: {
+      getSettings: () => ipcRenderer.invoke("reporting:get-settings"),
+      setPermissions: (permissions) => ipcRenderer.invoke("reporting:set-permissions", permissions),
+    },
+
     apps: {
       list() {
         return ipcRenderer.invoke(

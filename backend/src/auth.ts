@@ -365,7 +365,8 @@ export async function authenticate(
        AND s.expires_at > now()
        AND u.status = 'active'
        AND u.auth_version = $4
-       AND d.revoked_at IS NULL`,
+       AND d.revoked_at IS NULL
+       AND d.banned_at IS NULL`,
     [
       claims.sid,
       claims.sub,

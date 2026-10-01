@@ -1,3 +1,4 @@
+import DeviceReports, { type ReportedDevice } from "./DeviceReports";
 import {
   Activity,
   ArrowDownRight,
@@ -527,7 +528,7 @@ function UsersPage({ refresh, onSelect }: { refresh: number; onSelect: (userId: 
 
 type UserDetail = {
   user: UserRow & { role: string; email_verified_at?: string | null; phone_verified_at?: string | null; suspended_at?: string | null; suspension_reason?: string | null; banned_at?: string | null; ban_reason?: string | null };
-  devices: Array<Record<string, string | null>>;
+  devices: ReportedDevice[];
   sessions: Array<Record<string, string | null>>;
   subscriptions: Array<Record<string, string | null>>;
   payments: Array<Record<string, string | null>>;
@@ -547,7 +548,14 @@ function UserDetailPage({
   onBack: () => void;
   onAction: (action: ActionDialogState) => void;
 }) {
-  const result = useResource<UserDetail>(`/users/${userId}`, refresh);
+  const [reportRefresh, setReportRefresh] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setReportRefresh((value) => value + 1);
+    }, 20_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const result = useResource<UserDetail>(`/users/${userId}`, refresh + reportRefresh);
   const detail = result.data;
   const user = detail?.user;
   const canRevoke = admin.role !== "read_only";
@@ -570,6 +578,7 @@ function UserDetailPage({
           {canRevoke && <button className="secondary-button" onClick={() => onAction({ title: "Revoke all sessions", description: "Sign this account out everywhere and invalidate its active VPN peers.", endpoint: `/users/${user.id}/revoke-sessions`, payload: {} })}>Revoke all sessions</button>}
         </div>
       </section>
+      <DeviceReports devices={detail.devices} />
       <div className="detail-grid">
         <section className="section-panel">
           <div className="section-title"><div><span className="eyebrow">SECURITY</span><h2>Devices</h2></div><span className="count-pill">{detail.devices.length}</span></div>

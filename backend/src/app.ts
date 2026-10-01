@@ -7,6 +7,7 @@ import Fastify from "fastify";
 
 import { registerAuthRoutes } from "./auth.js";
 import { registerAdminRoutes } from "./admin.js";
+import { registerClientReportRoutes } from "./client-reports.js";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError, installErrorHandlers } from "./errors.js";
@@ -16,7 +17,7 @@ const uuidPattern =
 
 export async function buildApp() {
   const app = Fastify({
-    trustProxy: "127.0.0.1",
+    trustProxy: config.trustedProxyIps,
     genReqId(request) {
       const incoming = request.headers["x-request-id"];
 
@@ -101,6 +102,7 @@ export async function buildApp() {
 
   await registerAuthRoutes(app);
   await registerAdminRoutes(app);
+  await registerClientReportRoutes(app);
 
   return app;
 }

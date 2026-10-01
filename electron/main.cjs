@@ -5,11 +5,13 @@ const {
   dialog,
   session,
   safeStorage,
+  net,
 } = require("electron");
 
 const path = require("path");
 const { createElectronAuthOwner } = require("./auth/auth-owner.cjs");
 const { isTrustedAuthSender } = require("./auth/ipc-guard.cjs");
+const { createDeviceReporter } = require("./device-reporting.cjs");
 
 const {
   pingHost,
@@ -487,6 +489,19 @@ function registerAuthIPC() {
       clientVersion: app.getVersion(),
     },
   });
+  const reporter = createDeviceReporter({
+    owner: authOwner, userDataPath: app.getPath("userData"), isOnline: () => net.isOnline(),
+  });
+  reporter.start();
+  let quitting = false;
+  app.on("before-quit", (event) => {
+    if (quitting) return;
+    quitting = true;
+    event.preventDefault();
+    let timeout;
+    Promise.race([reporter.stop(), new Promise((resolve) => { timeout = setTimeout(resolve, 2000); })])
+      .finally(() => { clearTimeout(timeout); app.quit(); });
+  });
 
   function trusted(event) {
     return isTrustedAuthSender(
@@ -513,17 +528,23 @@ function registerAuthIPC() {
 
   ipcMain.handle("auth:login", async (event, input) => {
     if (!trusted(event)) return rejected();
-    return await authOwner.login(input);
+    const result = await authOwner.login(input);
+    if (result.ok) void reporter.tick();
+    return result;
   });
 
   ipcMain.handle("auth:restore", async (event) => {
     if (!trusted(event)) return rejected();
-    return await authOwner.restore();
+    const result = await authOwner.restore();
+    if (result.ok) void reporter.tick();
+    return result;
   });
 
   ipcMain.handle("auth:register", async (event, input) => {
     if (!trusted(event)) return rejected();
-    return await authOwner.register(input);
+    const result = await authOwner.register(input);
+    if (result.ok) void reporter.tick();
+    return result;
   });
 
   ipcMain.handle("auth:logout", async (event) => {
@@ -534,6 +555,15 @@ function registerAuthIPC() {
   ipcMain.handle("auth:logout-all", async (event) => {
     if (!trusted(event)) return rejected();
     return await authOwner.logoutAll();
+  });
+  ipcMain.handle("reporting:get-settings", (event) => {
+    if (!trusted(event)) return rejected();
+    return { ok: true, ...reporter.getSettings() };
+  });
+  ipcMain.handle("reporting:set-permissions", async (event, input) => {
+    if (!trusted(event)) return rejected();
+    try { return { ok: true, ...await reporter.setPermissions(input) }; }
+    catch { return { ok: false, error: { code: "SETTINGS_SAVE_FAILED", message: "Reporting settings could not be saved." } }; }
   });
 }
 
