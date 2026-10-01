@@ -1,8 +1,8 @@
 # Windows 0.3.10 Update Publication
 
-The generic `electron-updater` feed on port 8090 still advertises 0.3.9.
-Building 0.3.10 locally does not publish it. Existing 0.3.9 installations
-must receive 0.3.10 through that feed once; 0.3.10 itself has the HTTPS feed
+On 2026-10-01, the generic `electron-updater` feed on port 8090 and the new
+HTTPS `/updates/` feed published 0.3.10. Existing 0.3.9 installations receive
+0.3.10 through the legacy feed once; 0.3.10 itself has the HTTPS feed
 `https://hoaxnet.ir/updates/` embedded in `app-update.yml`.
 
 The release archive at `.tmp/HoaxConnect-0.3.10-update.tar.gz` contains only
@@ -24,10 +24,14 @@ routes, then atomically replaces `latest.yml` last. A failed publication
 restores the previous feed and Nginx configuration. The production API and
 PostgreSQL are not modified.
 
-After publication, check both public manifests and their installer hashes
-from outside the server, then test **Check for updates**, download, install and
-relaunch on an actual installed 0.3.9 client. Do not call the update verified
-from a manifest `200` or a socket check alone.
+Publication completed with `WINDOWS_UPDATE_PUBLISHED version=0.3.10`; the
+script verified complete downloads on both server-local routes before changing
+the live manifest. From Windows, the public HTTPS manifest reported 0.3.10,
+and a full external installer download matched its SHA-512 and 141660692-byte
+size. The installed 0.3.9 client downloaded the update to 100%, offered
+**Restart & Update**, and relaunched with installed file/product version 0.3.10.
+The app process was running after relaunch. This verifies the in-app update
+path, not subsequent VPN connectivity or every future update.
 
 The legacy 0.3.9 updater obtains metadata via HTTP and has no pinned
 manifest signature; an on-path attacker could replace its update instructions.

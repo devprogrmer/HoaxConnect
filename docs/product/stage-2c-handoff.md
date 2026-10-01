@@ -413,13 +413,12 @@ Verification in this checkout:
   for subsequent releases. Packaged reporter/IPC code and traffic-helper
   source/package hashes checked. Installer SHA-256:
   `86F9DD927593B5B0BEB02012C508647852CA44C21FA4B69BC7BF71BE87747436`.
-- The existing 0.3.9 client still checks the legacy HTTP port 8090, where
-  `latest.yml` continued to advertise 0.3.9 when checked. Version 0.3.10
-  cannot appear in-app until its installer, blockmap and metadata are
-  published to that feed. The release archive is local, not committed.
+- At the initial build checkpoint, the legacy HTTP port 8090 still advertised
+  0.3.9. The release archive was kept out of Git; later publication and the
+  installed-client result are recorded below.
 - `npm run test:update-artifacts`: 4 passed; the release artifact verifier also
   passed on the actual installer. The publication script passed Bash syntax
-  checking but has not run on the production update host yet.
+  checking and was later run on the production update host.
 - Neither version has an Authenticode signature. The old HTTP metadata path
   cannot be made tamper-proof from a 0.3.10 code change; this is a one-time
   bootstrap risk. The new build uses HTTPS, but signed artifacts and signed
@@ -441,15 +440,22 @@ Production evidence supplied by the user before this change:
 - The first Admin static publish got a 404 and rolled back; a retry was supplied
   but no definitive production static-byte check was received in this thread.
 
-Not yet verified / next starting point:
+Later production and updater evidence (2026-10-01):
 
-- Migration 005, the updated Admin assets and new client are NOT deployed to
-  production by this local work. Run the opt-in deployment script from a clean
-  release clone, retain its backup and Compose override path, then verify normal
-  external HTTPS and real device reports at `https://hoaxnet.ir/admin/`.
-- The new installer was built and its content inspected; installation/upgrading
-  the user's existing app and packaged production end-to-end reporting remain
-  unverified. Source Electron runtime is not an installer upgrade test.
+- The Stage 2F production deployment was reported successful after this local
+  checkpoint. External API health and Admin page both returned 200 on HTTPS.
+- The Windows publication script reported `WINDOWS_UPDATE_PUBLISHED` for
+  0.3.10. The public HTTPS manifest advertised 0.3.10, and a full external
+  installer download matched its SHA-512 and 141660692-byte manifest size.
+- The installed 0.3.9 client downloaded 0.3.10 to 100% and relaunched after
+  **Restart & Update**. The installed executable reported file version 0.3.10,
+  and a HoaxConnect process was running after relaunch.
+
+Still unverified / next starting point:
+
+- Confirm an authenticated, consented report from the packaged 0.3.10 client
+  is visible in the production Admin panel. API health and the Admin page alone
+  do not prove that reporting workflow.
 - Old clients have no report sender and must show "No app reports", not offline
   or invented hardware values. Existing proxy IP history cannot be recovered.
 - See `docs/product/client-device-reporting.md` for consent, validation,
