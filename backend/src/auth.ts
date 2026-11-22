@@ -378,6 +378,17 @@ export async function authenticate(
   const context = result.rows[0];
 
   if (!context) {
+    const moderated = await pool.query<UserRow>(
+      `SELECT u.*
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.id = $1 AND s.user_id = $2 AND s.device_id = $3
+         AND u.status IN ('suspended', 'banned')`,
+      [claims.sid, claims.sub, claims.did]
+    );
+    if (moderated.rows[0]) {
+      assertUserCanAuthenticate(moderated.rows[0]);
+    }
     throw new ApiError(
       401,
       "SESSION_INVALID",
@@ -876,25 +887,6 @@ async function createRefreshChallenge(
       );
     }
 
-    if (session.status !== "active") {
-      throw new ApiError(
-        401,
-        "SESSION_INVALID",
-        "The refresh session is not active."
-      );
-    }
-
-    if (
-      new Date(session.expires_at).getTime() <=
-      Date.now()
-    ) {
-      throw new ApiError(
-        401,
-        "SESSION_EXPIRED",
-        "The refresh session has expired."
-      );
-    }
-
     const userResult = await client.query<UserRow>(
       `SELECT *
        FROM users
@@ -914,6 +906,25 @@ async function createRefreshChallenge(
     }
 
     assertUserCanAuthenticate(user);
+
+    if (session.status !== "active") {
+      throw new ApiError(
+        401,
+        "SESSION_INVALID",
+        "The refresh session is not active."
+      );
+    }
+
+    if (
+      new Date(session.expires_at).getTime() <=
+      Date.now()
+    ) {
+      throw new ApiError(
+        401,
+        "SESSION_EXPIRED",
+        "The refresh session has expired."
+      );
+    }
 
     const deviceResult =
       await client.query<AuthDeviceRow>(

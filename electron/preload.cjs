@@ -54,6 +54,12 @@ contextBridge.exposeInMainWorld(
           "auth:logout-all"
         );
       },
+
+      onPolicy(handler) {
+        const listener = (_event, error) => handler(error);
+        ipcRenderer.on("auth:policy", listener);
+        return () => ipcRenderer.removeListener("auth:policy", listener);
+      },
     },
 
     reporting: {

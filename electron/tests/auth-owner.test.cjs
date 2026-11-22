@@ -92,6 +92,22 @@ test(
   }
 );
 
+test("account moderation message is shown only for known policy errors", async (t) => {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), "hoaxconnect-policy-message-"));
+  t.after(() => fs.rmSync(userDataPath, { recursive: true, force: true }));
+  for (const code of ["ACCOUNT_SUSPENDED", "ACCOUNT_BANNED"]) {
+    const owner = createElectronAuthOwner({
+      safeStorage: makeSafeStorage(), userDataPath,
+      configuredBackendUrl: "http://127.0.0.1:3100",
+      fetchImpl: async () => jsonResponse({ error: { code, message: "Policy review: contact support." } }, 403),
+    });
+    const result = await owner.login({ identifier: "user@example.test", password: "test-password" });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, code);
+    assert.match(result.error.message, /Policy review: contact support\./);
+  }
+});
+
 test("unknown Backend errors expose only a sanitized error code", async () => {
   const userDataPath = fs.mkdtempSync(
     path.join(os.tmpdir(), "hoaxconnect-auth-backend-error-")

@@ -64,6 +64,19 @@ test("concurrent ticks share a single request and closing sends no optional data
   assert.equal(reports.length, 2);
 });
 
+test("moderation notice is delivered once while the app is running", async (t) => {
+  const notices = [];
+  const { reporter, owner } = setup(t, { onPolicyError: (error) => notices.push(error) });
+  owner.reportDeviceState = async () => ({ ok: false, error: {
+    code: "ACCOUNT_BANNED", message: "This account is banned. Reason: Policy review.",
+  } });
+  await reporter.tick();
+  await reporter.tick();
+  assert.deepEqual(notices, [{
+    code: "ACCOUNT_BANNED", message: "This account is banned. Reason: Policy review.",
+  }]);
+});
+
 test("a hardware fingerprint hashes the reported UUID and rejects placeholder IDs", () => {
   assert.equal(hardwareFingerprint("00000000-0000-0000-0000-000000000000"), null);
   assert.equal(hardwareFingerprint("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"), null);

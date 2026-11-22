@@ -261,6 +261,45 @@ test(
     );
     assert.equal(audit.rows[0]?.action, "user.ban");
     assert.equal(audit.rows[0]?.reason, "verified abuse report");
+
+    const blockedLogin = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        identifier: `${emailPrefix}-user@example.test`,
+        password,
+        device: {
+          uid: randomUUID(), name: "Test Desktop", os: "windows",
+          platform: "win32", os_version: "11", architecture: "x64",
+          client_version: "0.3.11", public_key_spki: "a".repeat(64),
+        },
+      },
+    });
+    assert.equal(blockedLogin.statusCode, 403, blockedLogin.body);
+    assert.equal(blockedLogin.json().error.code, "ACCOUNT_BANNED");
+    assert.equal(blockedLogin.json().error.message, "verified abuse report");
+
+    const unban = await app.inject({
+      method: "POST", url: `/api/v1/admin/users/${userId}/status`,
+      headers: requestHeaders({ cookie: superadmin.cookie, "x-csrf-token": superadmin.csrf }),
+      payload: { action: "unban", reason: "review completed; restore access" },
+    });
+    assert.equal(unban.statusCode, 200, unban.body);
+    assert.equal(unban.json().data.status, "active");
+
+    const suspend = await app.inject({
+      method: "POST", url: `/api/v1/admin/users/${userId}/status`,
+      headers: requestHeaders({ cookie: superadmin.cookie, "x-csrf-token": superadmin.csrf }),
+      payload: { action: "suspend", reason: "temporary review is required" },
+    });
+    assert.equal(suspend.statusCode, 200, suspend.body);
+    const unsuspend = await app.inject({
+      method: "POST", url: `/api/v1/admin/users/${userId}/status`,
+      headers: requestHeaders({ cookie: superadmin.cookie, "x-csrf-token": superadmin.csrf }),
+      payload: { action: "unsuspend", reason: "temporary review has finished" },
+    });
+    assert.equal(unsuspend.statusCode, 200, unsuspend.body);
+    assert.equal(unsuspend.json().data.status, "active");
   },
 );
 

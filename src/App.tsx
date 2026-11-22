@@ -276,9 +276,11 @@ function Modal({
 function Login({
   onLogin,
   onModal,
+  initialError,
 }: {
   onLogin: () => void;
   onModal: (modal: ModalType) => void;
+  initialError: string;
 }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [identifier, setIdentifier] = useState("");
@@ -287,7 +289,7 @@ function Login({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -516,6 +518,7 @@ function Login({
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
+  const [authNotice, setAuthNotice] = useState("");
   const [authChecking, setAuthChecking] = useState(
     Boolean(window.hoax?.auth)
   );
@@ -523,6 +526,8 @@ export default function App() {
   const [modal, setModal] = useState<ModalType>(null);
   const [toast, setToast] = useState("");
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [connection, setConnection] =
+    useState<ConnectionState>("idle");
 
   async function performSignOut(allDevices: boolean) {
     if (logoutBusy) return;
@@ -572,6 +577,13 @@ export default function App() {
     if (!auth) return;
     const authApi = auth;
 
+    const unsubscribe = authApi.onPolicy((error) => {
+      if (error.code !== "ACCOUNT_SUSPENDED" && error.code !== "ACCOUNT_BANNED") return;
+      setAuthNotice(error.message);
+      setLoggedIn(false);
+      setConnection("idle");
+    });
+
     let cancelled = false;
 
     async function restoreSession() {
@@ -581,6 +593,11 @@ export default function App() {
 
         if (current.state.status === "restore_required") {
           const restored = await authApi.restore();
+          if (!restored.ok &&
+            (restored.error.code === "ACCOUNT_SUSPENDED" || restored.error.code === "ACCOUNT_BANNED") &&
+            !cancelled) {
+            setAuthNotice(restored.error.message);
+          }
           if (
             restored.ok &&
             restored.state.status === "authenticated" &&
@@ -605,6 +622,7 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -612,9 +630,6 @@ export default function App() {
   const [results, setResults] = useState<Record<string, ServerResult>>({});
   const [testingServer, setTestingServer] = useState<string | null>(null);
   const [testingAll, setTestingAll] = useState(false);
-
-  const [connection, setConnection] =
-    useState<ConnectionState>("idle");
 
   const [download, setDownload] = useState(0);
   const [upload, setUpload] = useState(0);
@@ -2190,7 +2205,7 @@ export default function App() {
   if (!loggedIn) {
     return (
       <>
-        <Login onLogin={() => setLoggedIn(true)} onModal={setModal} />
+        <Login onLogin={() => { setAuthNotice(""); setLoggedIn(true); }} onModal={setModal} initialError={authNotice} />
 
         <Modal
           type={modal}

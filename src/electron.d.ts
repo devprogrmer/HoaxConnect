@@ -520,6 +520,7 @@ declare global {
       restore(): Promise<HoaxAuthResponse>;
       logout(): Promise<HoaxAuthSignOutResponse>;
       logoutAll(): Promise<HoaxAuthSignOutResponse>;
+      onPolicy(handler: (error: { code: "ACCOUNT_SUSPENDED" | "ACCOUNT_BANNED"; message: string }) => void): () => void;
     };
     isDesktop: boolean;
 

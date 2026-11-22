@@ -451,6 +451,27 @@ Later production and updater evidence (2026-10-01):
   **Restart & Update**. The installed executable reported file version 0.3.10,
   and a HoaxConnect process was running after relaunch.
 
+Stage 2G account-moderation checkpoint (2026-11-22):
+
+- Admin account detail now makes Unsuspend and Unban explicit and displays the
+  current suspension/ban message. Ban and suspension reasons are identified as
+  messages shown to the affected user; restore reasons remain audit-only.
+- Banned and suspended accounts receive the bounded Backend policy message on
+  login, refresh restoration, and the next running-client device report. The
+  desktop returns to the sign-in screen when that live policy event arrives.
+- Unban and unsuspend now bind only the SQL parameters their statements use.
+  The isolated integration test caught the previous extra-parameter failure.
+- Targeted Admin integration suite against disposable PostgreSQL 18: 8 passed,
+  0 failed. Full Backend suite: 53 passed, 0 failed, 0 skipped; migrations 001
+  through 005 were applied only to the disposable database.
+- Desktop build, Admin build, and Backend build passed. Electron tests: 35
+  passed, 0 failed. Lint completed with 0 errors and the 16 previously recorded
+  desktop warnings.
+- The disposable database and test containers used loopback/dynamic ports and
+  were removed after each run. The unrelated workload on the test VPS was not
+  changed. No production deployment, migration, push, or release was performed
+  at this checkpoint.
+
 Still unverified / next starting point:
 
 - Confirm an authenticated, consented report from the packaged 0.3.10 client
@@ -460,5 +481,7 @@ Still unverified / next starting point:
   or invented hardware values. Existing proxy IP history cannot be recovered.
 - See `docs/product/client-device-reporting.md` for consent, validation,
   deployment and rollback boundaries.
+- Package and manually verify the Stage 2G policy message in the Windows app,
+  then deploy through the normal backed-up production path.
 - Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
   remain outside this slice and must not be described as implemented.

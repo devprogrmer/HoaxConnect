@@ -491,6 +491,11 @@ function registerAuthIPC() {
   });
   const reporter = createDeviceReporter({
     owner: authOwner, userDataPath: app.getPath("userData"), isOnline: () => net.isOnline(),
+    onPolicyError: (error) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("auth:policy", error);
+      }
+    },
   });
   reporter.start();
   let quitting = false;

@@ -64,7 +64,7 @@ const PASSTHROUGH_ERROR_CODES = new Set([
   "AUTH_RESPONSE_INVALID",
 ]);
 
-function authError(code, diagnostic = "") {
+function authError(code, diagnostic = "", publicMessage = null) {
   const error = new Error(
     ERROR_MESSAGES[code] ||
       ERROR_MESSAGES.AUTH_REJECTED
@@ -75,6 +75,16 @@ function authError(code, diagnostic = "") {
     /^[a-z0-9_, -]{1,160}$/.test(diagnostic)
   ) {
     error.authDiagnostic = diagnostic;
+  }
+  if (
+    (code === "ACCOUNT_SUSPENDED" || code === "ACCOUNT_BANNED") &&
+    typeof publicMessage === "string" &&
+    publicMessage.trim().length >= 8 &&
+    publicMessage.trim().length <= 500 &&
+    // eslint-disable-next-line no-control-regex
+    !/[\x00-\x1f\x7f]/.test(publicMessage)
+  ) {
+    error.publicMessage = publicMessage.trim();
   }
   return error;
 }
@@ -103,6 +113,9 @@ function safeError(error) {
         ? `Backend response check failed: ${error.authDiagnostic}.`
         : diagnosticCode
         ? `The Backend rejected the request (${diagnosticCode}).`
+        : error && error.publicMessage &&
+            (code === "ACCOUNT_SUSPENDED" || code === "ACCOUNT_BANNED")
+          ? `${ERROR_MESSAGES[code]} Reason: ${error.publicMessage}`
         : ERROR_MESSAGES[code] ||
           ERROR_MESSAGES.AUTH_REJECTED,
   };
@@ -297,7 +310,11 @@ function createElectronAuthOwner({
       if (
         PASSTHROUGH_ERROR_CODES.has(backendCode)
       ) {
-        throw authError(backendCode);
+        throw authError(
+          backendCode,
+          "",
+          body.error.message
+        );
       }
 
       const error = authError("AUTH_REJECTED");

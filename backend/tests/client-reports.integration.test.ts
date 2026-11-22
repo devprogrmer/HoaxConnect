@@ -205,6 +205,26 @@ test("client device reporting against isolated PostgreSQL", { skip: !databaseUrl
       assert.equal((await owner.reportDeviceState(shared, deviceId)).ok, false);
       assert.equal((await pool.query("SELECT 1 FROM client_device_reports WHERE device_id = $1", [next.device.id])).rowCount, 0);
     });
+    await t.test("a signed-in client receives the account ban message on its next report and restore", async () => {
+      const moderated = await register();
+      const reason = "Account access is paused for policy review.";
+      await pool.query(
+        "UPDATE users SET status = 'banned', ban_reason = $2, auth_version = auth_version + 1 WHERE id = $1",
+        [moderated.user.id, reason],
+      );
+      const response = await report(shared);
+      assert.equal(response.statusCode, 403, response.body);
+      assert.equal(response.json().error.code, "ACCOUNT_BANNED");
+      assert.equal(response.json().error.message, reason);
+      const ownerReport = await owner.reportDeviceState(shared, moderated.device.id);
+      assert.equal(ownerReport.ok, false);
+      assert.equal(ownerReport.error.code, "ACCOUNT_BANNED");
+      assert.match(ownerReport.error.message, /Account access is paused for policy review/);
+      const restored = await owner.restore();
+      assert.equal(restored.ok, false);
+      assert.equal(restored.error.code, "ACCOUNT_BANNED");
+      assert.match(restored.error.message, /Account access is paused for policy review/);
+    });
   } finally {
     await app.close();
     await pool.query("DELETE FROM users WHERE id = ANY($1::uuid[])", [userIds]);

@@ -447,7 +447,9 @@ async function changeUserStatus(
       };
       const updated = await client.query(
         updateSql[input.action]!,
-        [userId, input.reason],
+        input.action === "suspend" || input.action === "ban"
+          ? [userId, input.reason]
+          : [userId],
       );
 
       if (input.action === "suspend" || input.action === "ban") {

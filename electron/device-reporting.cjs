@@ -56,7 +56,7 @@ async function collectApplications() {
 
 function createDeviceReporter({ owner, userDataPath, isOnline = () => true,
   hardwareCollector = collectHardware, applicationsCollector = collectApplications,
-  now = Date.now, intervalMs = 30_000 }) {
+  onPolicyError = () => {}, now = Date.now, intervalMs = 30_000 }) {
   const file = path.join(userDataPath, "device-reporting.json");
   let permissions;
   try { permissions = normalizePermissions(JSON.parse(fs.readFileSync(file, "utf8"))); }
@@ -70,6 +70,7 @@ function createDeviceReporter({ owner, userDataPath, isOnline = () => true,
   let lastSentAt = null;
   let hardware = null;
   let hardwareReadAt = 0;
+  let lastPolicyNotice = null;
 
   function getSettings() { return { permissions: { ...permissions }, lastSentAt }; }
 
@@ -102,8 +103,20 @@ function createDeviceReporter({ owner, userDataPath, isOnline = () => true,
     if (version !== generation || (stopped && appState !== "closed")) return;
     const start = now();
     const result = await owner.reportDeviceState(report, deviceId);
-    if (result.ok) { lastSentAt = new Date(now()).toISOString(); lastRtt = Math.min(120_000, Math.max(0, now() - start)); failures = 0; }
-    else { failures = Math.min(1_000_000, failures + 1); }
+    if (result.ok) {
+      lastSentAt = new Date(now()).toISOString(); lastRtt = Math.min(120_000, Math.max(0, now() - start)); failures = 0;
+      lastPolicyNotice = null;
+    } else {
+      failures = Math.min(1_000_000, failures + 1);
+      const error = result.error;
+      if (error && ["ACCOUNT_SUSPENDED", "ACCOUNT_BANNED"].includes(error.code)) {
+        const notice = `${error.code}:${error.message}`;
+        if (notice !== lastPolicyNotice) {
+          lastPolicyNotice = notice;
+          onPolicyError({ code: error.code, message: error.message });
+        }
+      }
+    }
   }
 
   function tick() {
