@@ -18,7 +18,6 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
 RUN install -d -o node -g node -m 0700 /state
-USER node
-ENTRYPOINT ["dumb-init", "--"]
+ENTRYPOINT ["dumb-init", "--", "setpriv", "--reuid", "1000", "--regid", "1000", "--init-groups", "--inh-caps", "+net_admin", "--ambient-caps", "+net_admin", "--bounding-set", "-setuid,-setgid,-setpcap", "--no-new-privs"]
 CMD ["node", "dist/main.js"]
 

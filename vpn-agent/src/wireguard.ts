@@ -47,7 +47,25 @@ function assertSafe(value: string, pattern: RegExp, label: string) {
   if (!pattern.test(value)) throw new Error(`Unsafe ${label}`);
 }
 
+function networkCidr(value: string) {
+  assertSafe(value, ipv4Cidr, "WireGuard address");
+  const [address = "", prefixText = ""] = value.split("/");
+  const prefix = Number(prefixText);
+  if (prefix < 0 || prefix > 32) throw new Error("Unsafe WireGuard address");
+  const octets = address.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((octet) => octet < 0 || octet > 255)) {
+    throw new Error("Unsafe WireGuard address");
+  }
+  const raw = octets.reduce((result, octet) => ((result << 8) | octet) >>> 0, 0);
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  const network = (raw & mask) >>> 0;
+  return `${[(network >>> 24) & 255, (network >>> 16) & 255,
+    (network >>> 8) & 255, network & 255].join(".")}/${prefix}`;
+}
+
 export class LinuxWireGuardAdapter implements WireGuardAdapter {
+  private natSourceCidr: string | undefined;
+
   constructor(
     private readonly interfaceName: string,
     private readonly runner: CommandRunner = defaultRunner,
@@ -79,6 +97,7 @@ export class LinuxWireGuardAdapter implements WireGuardAdapter {
       "listen-port", String(config.listenPort)]);
     await this.runner("ip", ["address", "replace", config.address, "dev", config.name]);
     await this.runner("ip", ["link", "set", "dev", config.name, "up"]);
+    this.natSourceCidr = networkCidr(config.address);
   }
 
   async listPeers() {
@@ -106,6 +125,7 @@ export class LinuxWireGuardAdapter implements WireGuardAdapter {
 
   async ensureNat(egressInterface: string) {
     assertSafe(egressInterface, safeName, "egress interface");
+    if (!this.natSourceCidr) throw new Error("WireGuard interface must be configured before NAT");
     try { await this.runner("nft", ["list", "table", "inet", "hoaxconnect"]); }
     catch {
       await this.runner("nft", ["add", "table", "inet", "hoaxconnect"]);
@@ -113,10 +133,29 @@ export class LinuxWireGuardAdapter implements WireGuardAdapter {
         "{", "type", "nat", "hook", "postrouting", "priority", "srcnat", ";", "policy", "accept", ";", "}"]);
     }
     const rules = (await this.runner("nft", ["list", "chain", "inet", "hoaxconnect", "postrouting"])).stdout;
-    const marker = `hoaxconnect-nat-${egressInterface}`;
+    const marker = `hoaxconnect-nat-${this.interfaceName}-${egressInterface}`;
     if (!rules.includes(marker)) {
       await this.runner("nft", ["add", "rule", "inet", "hoaxconnect", "postrouting",
-        "oifname", egressInterface, "masquerade", "comment", marker]);
+        "ip", "saddr", this.natSourceCidr, "oifname", egressInterface,
+        "masquerade", "comment", marker]);
+    }
+    let forwardRules: string;
+    try {
+      forwardRules = (await this.runner("nft", ["list", "chain", "ip", "filter", "DOCKER-USER"])).stdout;
+    } catch {
+      throw new Error("Docker DOCKER-USER forwarding chain is unavailable");
+    }
+    const forwardMarker = `hoaxconnect-forward-${this.interfaceName}-${egressInterface}`;
+    if (!forwardRules.includes(`${forwardMarker}-out`)) {
+      await this.runner("nft", ["insert", "rule", "ip", "filter", "DOCKER-USER",
+        "iifname", this.interfaceName, "oifname", egressInterface,
+        "ip", "saddr", this.natSourceCidr, "accept", "comment", `${forwardMarker}-out`]);
+    }
+    if (!forwardRules.includes(`${forwardMarker}-in`)) {
+      await this.runner("nft", ["insert", "rule", "ip", "filter", "DOCKER-USER",
+        "iifname", egressInterface, "oifname", this.interfaceName,
+        "ip", "daddr", this.natSourceCidr, "ct", "state", "established,related",
+        "accept", "comment", `${forwardMarker}-in`]);
     }
   }
 

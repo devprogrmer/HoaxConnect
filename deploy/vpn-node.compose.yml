@@ -8,6 +8,9 @@ services:
       - ALL
     cap_add:
       - NET_ADMIN
+      - SETUID
+      - SETGID
+      - SETPCAP
     security_opt:
       - no-new-privileges:true
     read_only: true

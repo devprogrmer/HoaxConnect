@@ -538,13 +538,40 @@ Stage 5 Linux VPN node-agent checkpoint (2026-11-22):
 - The Linux adapter invokes only fixed `wg`, `ip`, and `nft` binaries with
   argument arrays. It owns the `hcx0` interface and `inet hoaxconnect` nftables
   table and rejects unsafe names/addresses before command execution.
-- Agent tests passed 6/6 on Windows and 6/6 inside a disposable Linux
+- Agent tests passed 7/7 on Windows and 7/7 inside a disposable Linux
   container, including the Linux 0600 assertion. TypeScript build passed. The
-  image built successfully, runs as user `node`, and passed a read-only,
-  zero-capability dry-run. The deployment compose grants only `NET_ADMIN`,
-  host networking, a private state volume, and bounded CPU/memory.
+  image built successfully and passed a read-only, zero-capability dry-run.
+  Its fixed launcher starts with only the capabilities needed to change UID,
+  then runs as UID/GID 1000 with only `NET_ADMIN`. NAT and Docker forwarding
+  rules are restricted to the configured tunnel CIDR and interfaces.
 - The image build and dry-run did not start WireGuard, change nftables, migrate
   a database, deploy production, or modify the unrelated server workload.
+
+Stage 5 isolated Linux tunnel checkpoint (2026-11-23):
+
+- The E2E preflight was observed RED because host `wg` was absent. Only
+  `wireguard-tools` was installed; a disposable WireGuard interface proved
+  current-kernel support. Nginx and the unrelated Compose project were not
+  changed.
+- A disposable PostgreSQL 18 database, current Backend, node agent, account,
+  subscription, device, and Linux network-namespace client exercised the real
+  authorization and desired-state paths. No production database was used.
+- The client received `10.99.0.2`, completed a real WireGuard handshake, reached
+  the node tunnel address, completed a UDP DNS exchange, and made an HTTPS
+  request through the tunnel. The independently observed public egress address
+  was `194.26.64.241`.
+- Backend disconnect removed the peer from desired state and the running agent;
+  traffic from the revoked client then failed. This proves live revocation, not
+  merely a database status change.
+- The complete E2E passed twice. Each run removed its database/API/agent
+  containers, namespace, interfaces, secrets, dedicated nftables table, and
+  tagged forwarding rules. The four unrelated `hoaxnet-*` containers remained
+  running/healthy and the Nginx configuration hash stayed unchanged.
+- Agent tests passed 7/7 on Windows and Linux after the non-root capability and
+  scoped-forwarding fixes. The full Backend suite passed 62/62 against
+  disposable PostgreSQL 18 with migrations 001 through 008. Backend build and
+  Agent build passed. The test did not deploy a persistent node or publish a
+  desktop release.
 
 Still unverified / next starting point:
 
@@ -557,7 +584,9 @@ Still unverified / next starting point:
   deployment and rollback boundaries.
 - Package and manually verify the Stage 2G policy message in the Windows app,
   then deploy through the normal backed-up production path.
-- Run the isolated Linux network-namespace E2E: real WireGuard handshake,
-  routed UDP/TCP traffic, peer revocation, and cleanup proof.
-- Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
-  remain outside this slice and must not be described as implemented.
+- Linux node connectivity and revocation are proven only in the isolated VPS
+  E2E. A persistent production node has not been deployed.
+- The Windows desktop tunnel remains simulated until Stage 6 implements and
+  packages the privileged service, protected client keys, route/DNS/firewall
+  rollback, and Windows E2E. MFA enrollment and SMS delivery also remain
+  outside this slice.
