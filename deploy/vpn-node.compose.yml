@@ -1,0 +1,24 @@
+services:
+  vpn-agent:
+    build:
+      context: ../vpn-agent
+    restart: unless-stopped
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    volumes:
+      - hoaxconnect_vpn_agent_state:/state
+    env_file:
+      - vpn-node.env
+    mem_limit: 128m
+    cpus: 0.50
+
+volumes:
+  hoaxconnect_vpn_agent_state:

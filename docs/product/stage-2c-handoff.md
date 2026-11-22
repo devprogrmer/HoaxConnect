@@ -527,6 +527,25 @@ Stage 5 per-device VPN authorization checkpoint (2026-11-22):
   008 applied. Backend TypeScript build and `git diff --check` passed. No
   production deployment or migration was performed.
 
+Stage 5 Linux VPN node-agent checkpoint (2026-11-22):
+
+- The containerized TypeScript agent enrolls once with an Ed25519 identity and
+  stores private identity state with mode 0600. Every control request receives
+  a fresh nonce/signature and bounded exponential retry.
+- The reconciler converges desired peers idempotently, persists only
+  HoaxConnect-managed peer ownership, recovers after restart, retries partial
+  applies, and never removes unmanaged peers or interfaces.
+- The Linux adapter invokes only fixed `wg`, `ip`, and `nft` binaries with
+  argument arrays. It owns the `hcx0` interface and `inet hoaxconnect` nftables
+  table and rejects unsafe names/addresses before command execution.
+- Agent tests passed 6/6 on Windows and 6/6 inside a disposable Linux
+  container, including the Linux 0600 assertion. TypeScript build passed. The
+  image built successfully, runs as user `node`, and passed a read-only,
+  zero-capability dry-run. The deployment compose grants only `NET_ADMIN`,
+  host networking, a private state volume, and bounded CPU/memory.
+- The image build and dry-run did not start WireGuard, change nftables, migrate
+  a database, deploy production, or modify the unrelated server workload.
+
 Still unverified / next starting point:
 
 - Confirm an authenticated, consented report from the packaged 0.3.10 client
@@ -538,7 +557,7 @@ Still unverified / next starting point:
   deployment and rollback boundaries.
 - Package and manually verify the Stage 2G policy message in the Windows app,
   then deploy through the normal backed-up production path.
-- Implement the Stage 5 Linux node agent and reconcile signed desired peer
-  state into a real WireGuard interface.
+- Run the isolated Linux network-namespace E2E: real WireGuard handshake,
+  routed UDP/TCP traffic, peer revocation, and cleanup proof.
 - Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
   remain outside this slice and must not be described as implemented.
