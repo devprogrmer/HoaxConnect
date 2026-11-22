@@ -485,6 +485,23 @@ Stage 5 VPN control-plane persistence checkpoint (2026-11-22):
 - The schema integration test was observed RED before migration 006 and GREEN
   after it. Full Backend suite against disposable PostgreSQL 18: 54 passed,
   0 failed, 0 skipped; migrations 001 through 006 applied.
+
+Stage 5 VPN node-agent authentication checkpoint (2026-11-22):
+
+- Migration 007 adds bounded agent version/load telemetry and last-agent address
+  metadata without changing migration 006.
+- The one-time bootstrap command stores only a SHA-256 enrollment-token hash.
+  Enrollment accepts a canonical Ed25519 SPKI public key, returns only public
+  credential metadata, and permanently consumes the token.
+- Agent heartbeat requests use an Ed25519 signature over a versioned canonical
+  request, a bounded timestamp, and a transactionally consumed nonce. Replays,
+  wrong-node credentials, invalid signatures, expired requests, and revoked
+  credentials are rejected.
+- The agent-auth integration test was observed RED at the missing enrollment
+  route and GREEN after implementation. The targeted test passed 1/1; the full
+  Backend suite against disposable PostgreSQL 18 passed 55/55 with migrations
+  001 through 007 applied. Backend TypeScript build and `git diff --check`
+  passed. No production deployment or migration was performed.
 - The test database used a loopback dynamic port and was removed after the run.
   The other project and its healthy containers on the VPS were not changed.
   Migration 006 has not been applied to any production database.
@@ -500,7 +517,7 @@ Still unverified / next starting point:
   deployment and rollback boundaries.
 - Package and manually verify the Stage 2G policy message in the Windows app,
   then deploy through the normal backed-up production path.
-- Implement Stage 5 node enrollment and signed agent heartbeats on top of
-  migration 006; schema presence alone is not a working VPN node.
+- Implement Stage 5 client authorization, lease renewal, and revocation on top
+  of the authenticated node heartbeat protocol.
 - Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
   remain outside this slice and must not be described as implemented.
