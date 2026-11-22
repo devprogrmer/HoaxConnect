@@ -472,6 +472,23 @@ Stage 2G account-moderation checkpoint (2026-11-22):
   changed. No production deployment, migration, push, or release was performed
   at this checkpoint.
 
+Stage 5 VPN control-plane persistence checkpoint (2026-11-22):
+
+- Migration 006 adds node enrollment tokens, enrolled Ed25519 credential
+  metadata, signed-request replay nonces, node tunnel settings, and renewable
+  per-device VPN-session leases. It does not expose or store node/client private
+  keys and does not delete or rewrite existing VPN/accounting rows.
+- Partial unique indexes enforce one live VPN session per device, one live
+  address per node, and one live session per peer. Database checks constrain
+  key fingerprints, WireGuard public keys, IPv4 leases, ports, CIDRs, nonce
+  values, lease expiry, and terminal-session timestamps.
+- The schema integration test was observed RED before migration 006 and GREEN
+  after it. Full Backend suite against disposable PostgreSQL 18: 54 passed,
+  0 failed, 0 skipped; migrations 001 through 006 applied.
+- The test database used a loopback dynamic port and was removed after the run.
+  The other project and its healthy containers on the VPS were not changed.
+  Migration 006 has not been applied to any production database.
+
 Still unverified / next starting point:
 
 - Confirm an authenticated, consented report from the packaged 0.3.10 client
@@ -483,5 +500,7 @@ Still unverified / next starting point:
   deployment and rollback boundaries.
 - Package and manually verify the Stage 2G policy message in the Windows app,
   then deploy through the normal backed-up production path.
+- Implement Stage 5 node enrollment and signed agent heartbeats on top of
+  migration 006; schema presence alone is not a working VPN node.
 - Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
   remain outside this slice and must not be described as implemented.
