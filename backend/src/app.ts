@@ -9,6 +9,7 @@ import { registerAuthRoutes } from "./auth.js";
 import { registerAdminRoutes } from "./admin.js";
 import { registerClientReportRoutes } from "./client-reports.js";
 import { registerVpnAgentRoutes } from "./vpn-agent-routes.js";
+import { registerVpnRoutes } from "./vpn-routes.js";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError, installErrorHandlers } from "./errors.js";
@@ -105,6 +106,7 @@ export async function buildApp() {
   await registerAdminRoutes(app);
   await registerClientReportRoutes(app);
   await registerVpnAgentRoutes(app);
+  await registerVpnRoutes(app);
 
   return app;
 }

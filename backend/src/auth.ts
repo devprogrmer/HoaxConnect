@@ -11,6 +11,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError } from "./errors.js";
+import { revokeVpnSessions } from "./vpn-control.js";
 import {
   decryptRecoveryResponse,
   encryptRecoveryResponse,
@@ -1401,6 +1402,12 @@ async function logout(
       [auth.sessionId]
     );
 
+    await revokeVpnSessions(
+      client,
+      { authSessionId: auth.sessionId },
+      "user_logout",
+    );
+
     await audit(
       client,
       request,
@@ -1448,6 +1455,8 @@ async function logoutAll(
          AND status = 'active'`,
       [auth.userId]
     );
+
+    await revokeVpnSessions(client, { userId: auth.userId }, "logout_all");
 
     await audit(
       client,
@@ -1557,6 +1566,8 @@ async function revokeDevice(
          AND status = 'active'`,
       [deviceId]
     );
+
+    await revokeVpnSessions(client, { deviceId }, "device_revoked");
 
     await audit(
       client,

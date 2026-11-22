@@ -506,6 +506,27 @@ Stage 5 VPN node-agent authentication checkpoint (2026-11-22):
   The other project and its healthy containers on the VPS were not changed.
   Migration 006 has not been applied to any production database.
 
+Stage 5 per-device VPN authorization checkpoint (2026-11-22):
+
+- Migration 008 replaces permanent peer IP/key uniqueness with partial unique
+  indexes for pending and active peers, so disconnected addresses can be safely
+  reused without weakening live-session uniqueness.
+- Authenticated clients can request a five-minute renewable lease. The Backend
+  checks account/device state, subscription dates and quota, concurrency, node
+  heartbeat freshness/capacity, and allocates a node address transactionally.
+  Concurrent reconnects for the same device/key return the same lease.
+- The Backend returns only public tunnel material; client private keys remain
+  outside the Backend. Signed node desired-state reads expose active peers and
+  bounded recent revocations for reconciliation.
+- Disconnect, logout, logout-all, account suspension/ban, and device
+  revocation/ban revoke live VPN sessions and peer desired state in the same
+  database transaction.
+- The authorization suite was observed RED at the missing routes and GREEN
+  after implementation: 7/7 targeted scenarios passed. The full Backend suite
+  against disposable PostgreSQL 18 passed 62/62 with migrations 001 through
+  008 applied. Backend TypeScript build and `git diff --check` passed. No
+  production deployment or migration was performed.
+
 Still unverified / next starting point:
 
 - Confirm an authenticated, consented report from the packaged 0.3.10 client
@@ -517,7 +538,7 @@ Still unverified / next starting point:
   deployment and rollback boundaries.
 - Package and manually verify the Stage 2G policy message in the Windows app,
   then deploy through the normal backed-up production path.
-- Implement Stage 5 client authorization, lease renewal, and revocation on top
-  of the authenticated node heartbeat protocol.
+- Implement the Stage 5 Linux node agent and reconcile signed desired peer
+  state into a real WireGuard interface.
 - Real VPN connectivity, node-agent traffic, MFA enrollment and SMS delivery
   remain outside this slice and must not be described as implemented.

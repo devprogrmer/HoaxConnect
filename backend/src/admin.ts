@@ -23,6 +23,7 @@ import {
   maskProviderValue,
 } from "./admin-security.js";
 import { hashPassword, verifyPassword } from "./security.js";
+import { revokeVpnSessions } from "./vpn-control.js";
 
 const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 const ADMIN_COOKIE_NAME = "hc_admin_session";
@@ -465,6 +466,11 @@ async function changeUserStatus(
            WHERE user_id = $1 AND status IN ('pending', 'active')`,
           [userId, `admin_${input.action}`],
         );
+        await revokeVpnSessions(
+          client,
+          { userId },
+          `admin_${input.action}`,
+        );
       }
 
       const version = await client.query<{ auth_version: number }>(
@@ -570,6 +576,11 @@ async function changeDevice(
              revoke_reason = $2, updated_at = now()
            WHERE device_id = $1 AND status IN ('pending', 'active')`,
           [deviceId, `admin_device_${input.action}`],
+        );
+        await revokeVpnSessions(
+          client,
+          { deviceId },
+          `admin_device_${input.action}`,
         );
       }
       return { device_id: deviceId, action: input.action };
