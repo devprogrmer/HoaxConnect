@@ -123,6 +123,24 @@ export class LinuxWireGuardAdapter implements WireGuardAdapter {
     await this.runner("wg", ["set", this.interfaceName, "peer", publicKey, "remove"]);
   }
 
+  private async removeStaleOwnedRules(
+    rules: string,
+    family: string,
+    table: string,
+    chain: string,
+    markerPrefix: string,
+    expectedMarkers: ReadonlySet<string>,
+  ) {
+    for (const line of rules.split("\n")) {
+      const comment = line.match(/\bcomment "([^"]+)"/)?.[1];
+      if (!comment || (comment !== markerPrefix && !comment.startsWith(`${markerPrefix}-`)) ||
+          expectedMarkers.has(comment)) continue;
+      const handle = line.match(/# handle (\d+)\s*$/)?.[1];
+      if (!handle) throw new Error("Owned firewall rule is missing an nftables handle");
+      await this.runner("nft", ["delete", "rule", family, table, chain, "handle", handle]);
+    }
+  }
+
   async ensureNat(egressInterface: string) {
     assertSafe(egressInterface, safeName, "egress interface");
     if (!this.natSourceCidr) throw new Error("WireGuard interface must be configured before NAT");
@@ -132,26 +150,34 @@ export class LinuxWireGuardAdapter implements WireGuardAdapter {
       await this.runner("nft", ["add", "chain", "inet", "hoaxconnect", "postrouting",
         "{", "type", "nat", "hook", "postrouting", "priority", "srcnat", ";", "policy", "accept", ";", "}"]);
     }
-    const rules = (await this.runner("nft", ["list", "chain", "inet", "hoaxconnect", "postrouting"])).stdout;
-    const marker = `hoaxconnect-nat-${this.interfaceName}-${egressInterface}`;
-    if (!rules.includes(marker)) {
+    const cidrMarker = this.natSourceCidr.replace(/[./]/g, "-");
+    const rules = (await this.runner("nft", ["-a", "list", "chain", "inet", "hoaxconnect", "postrouting"])).stdout;
+    const markerPrefix = `hoaxconnect-nat-${this.interfaceName}-${egressInterface}`;
+    const marker = `${markerPrefix}-${cidrMarker}`;
+    await this.removeStaleOwnedRules(rules, "inet", "hoaxconnect", "postrouting",
+      markerPrefix, new Set([marker]));
+    if (!rules.includes(`comment "${marker}"`)) {
       await this.runner("nft", ["add", "rule", "inet", "hoaxconnect", "postrouting",
         "ip", "saddr", this.natSourceCidr, "oifname", egressInterface,
         "masquerade", "comment", marker]);
     }
     let forwardRules: string;
     try {
-      forwardRules = (await this.runner("nft", ["list", "chain", "ip", "filter", "DOCKER-USER"])).stdout;
+      forwardRules = (await this.runner("nft", ["-a", "list", "chain", "ip", "filter", "DOCKER-USER"])).stdout;
     } catch {
       throw new Error("Docker DOCKER-USER forwarding chain is unavailable");
     }
-    const forwardMarker = `hoaxconnect-forward-${this.interfaceName}-${egressInterface}`;
-    if (!forwardRules.includes(`${forwardMarker}-out`)) {
+    const forwardMarkerPrefix = `hoaxconnect-forward-${this.interfaceName}-${egressInterface}`;
+    const forwardMarker = `${forwardMarkerPrefix}-${cidrMarker}`;
+    const expectedForwardMarkers = new Set([`${forwardMarker}-out`, `${forwardMarker}-in`]);
+    await this.removeStaleOwnedRules(forwardRules, "ip", "filter", "DOCKER-USER",
+      forwardMarkerPrefix, expectedForwardMarkers);
+    if (!forwardRules.includes(`comment "${forwardMarker}-out"`)) {
       await this.runner("nft", ["insert", "rule", "ip", "filter", "DOCKER-USER",
         "iifname", this.interfaceName, "oifname", egressInterface,
         "ip", "saddr", this.natSourceCidr, "accept", "comment", `${forwardMarker}-out`]);
     }
-    if (!forwardRules.includes(`${forwardMarker}-in`)) {
+    if (!forwardRules.includes(`comment "${forwardMarker}-in"`)) {
       await this.runner("nft", ["insert", "rule", "ip", "filter", "DOCKER-USER",
         "iifname", egressInterface, "oifname", this.interfaceName,
         "ip", "daddr", this.natSourceCidr, "ct", "state", "established,related",

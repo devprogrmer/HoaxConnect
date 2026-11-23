@@ -16,6 +16,21 @@ the Windows tunnel service and does not make the desktop Connect button real.
 - A Backend node record and unused one-time enrollment token created by the
   operator command in `backend/dist/vpn-node-bootstrap.js`.
 
+On Debian or Ubuntu, install the host packages explicitly so a replacement
+server can be prepared from this repository alone:
+
+```bash
+apt-get update
+apt-get install -y docker.io docker-compose-plugin nftables wireguard-tools curl
+modprobe wireguard
+sysctl -w net.ipv4.ip_forward=1
+```
+
+Persist IPv4 forwarding through the host's configuration management. Do not
+blindly overwrite an existing `/etc/sysctl.conf`; add an owned drop-in such as
+`/etc/sysctl.d/90-hoaxconnect-vpn.conf` containing
+`net.ipv4.ip_forward = 1`, then run `sysctl --system`.
+
 Do not reuse a node ID, enrollment token, state volume, WireGuard CIDR, or UDP
 port across nodes. Never place a client or node private key in the Backend.
 
@@ -76,11 +91,27 @@ is `sudo HC_ROOT=/opt/HoaxConnect bash scripts/test-vpn-node-e2e.sh`.
 1. Revoke the node credential and active VPN sessions in the Backend.
 2. Stop the agent Compose service.
 3. Remove only rules whose comments match
-   `hoaxconnect-forward-<wg-interface>-<egress-interface>-{in,out}`.
+   `hoaxconnect-forward-<wg-interface>-<egress-interface>-<tunnel-cidr>-{in,out}`.
 4. Delete only the configured HoaxConnect WireGuard interface and the exact
    `inet hoaxconnect` table after confirming no managed session remains.
 5. Preserve the state volume for investigation or credential-safe recovery.
 
 Do not delete Docker's shared `ip filter` table or `DOCKER-USER` chain. Do not
 remove another project's containers, volumes, firewall rules, or Nginx files.
+
+## Recovery after total node loss
+
+1. Provision a clean supported Linux host and install the prerequisites above.
+2. Clone the exact reviewed Git commit or release; never recover from an
+   unpinned moving branch.
+3. Restore only the protected `vpn-node.env` and agent state volume when the
+   node credential is still trusted. Otherwise revoke it and enroll a new node.
+4. Reapply the provider UDP firewall rule and verify the public endpoint.
+5. Start `deploy/vpn-node.compose.yml`, then run every check in **Verification**.
+6. Run `scripts/test-vpn-node-e2e.sh` on an isolated test checkout before
+   admitting real client sessions.
+
+The repository intentionally contains no enrollment token, private key,
+production environment file, database dump, or provider credential. Those must
+be backed up in a separate encrypted secret store.
 

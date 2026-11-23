@@ -48,3 +48,40 @@ test("container launcher drops to node with only NET_ADMIN after startup", async
     assert.match(compose, new RegExp(`- ${capability}`));
   }
 });
+
+test("NAT reconciliation removes stale owned CIDR rules and preserves foreign rules", async () => {
+  const state = await mkdtemp(join(tmpdir(), "hc-agent-wg-cidr-"));
+  const calls: Array<{ file: string; args: readonly string[] }> = [];
+  const runner: CommandRunner = async (file, args) => {
+    calls.push({ file, args });
+    const command = args.join(" ");
+    if (file === "wg" && args[0] === "genkey") return { stdout: `${"A".repeat(43)}=\n`, stderr: "" };
+    if (file === "nft" && command.includes("inet hoaxconnect postrouting")) {
+      return { stdout: `ip saddr 10.77.0.0/24 masquerade comment "hoaxconnect-nat-hcx0-eth0-10-77-0-0-24" # handle 41\n`, stderr: "" };
+    }
+    if (file === "nft" && command.includes("ip filter DOCKER-USER")) {
+      return { stdout: [
+        `iifname "hcx0" accept comment "hoaxconnect-forward-hcx0-eth0-10-77-0-0-24-out" # handle 51`,
+        `oifname "hcx0" accept comment "hoaxconnect-forward-hcx0-eth0-10-77-0-0-24-in" # handle 52`,
+        `counter comment "hoaxconnect-forward-hcx0-eth0x-10-77-0-0-24-out" # handle 98`,
+        `counter comment "foreign-rule" # handle 99`,
+      ].join("\n"), stderr: "" };
+    }
+    return { stdout: "", stderr: "" };
+  };
+  const adapter = new LinuxWireGuardAdapter("hcx0", runner);
+  try {
+    await adapter.ensureInterface({ name: "hcx0", address: "10.88.0.1/24", listenPort: 51820,
+      privateKeyPath: join(state, "wireguard.key"), egressInterface: "eth0" });
+    await adapter.ensureNat("eth0");
+    const deletedHandles = calls.filter((call) => call.file === "nft" &&
+      call.args[0] === "delete").map((call) => call.args.at(-1));
+    assert.deepEqual(deletedHandles.sort(), ["41", "51", "52"]);
+    assert.equal(deletedHandles.includes("98"), false);
+    assert.equal(deletedHandles.includes("99"), false);
+    assert.ok(calls.some((call) => call.args.join(" ").includes(
+      "comment hoaxconnect-nat-hcx0-eth0-10-88-0-0-24")));
+    assert.ok(calls.some((call) => call.args.join(" ").includes(
+      "comment hoaxconnect-forward-hcx0-eth0-10-88-0-0-24-out")));
+  } finally { await rm(state, { recursive: true, force: true }); }
+});

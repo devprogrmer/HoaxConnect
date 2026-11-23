@@ -62,6 +62,7 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
   let token = "";
   let deviceId = "";
   const peerKey = `${"B".repeat(43)}=`;
+  let desiredPeerKey = peerKey;
   const authorize = (payload: unknown = {
     client_public_key: peerKey, country_code: "DE", region: "fra",
   }) => app.inject({
@@ -159,6 +160,33 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
       assert.equal(count.rows[0].count, 1);
     });
 
+    await t.test("renews at node capacity and reclaims an expired lease and address", async () => {
+      await pool.query("UPDATE vpn_nodes SET current_peers = capacity_peers WHERE id = $1", [ids.node]);
+      const renewed = await authorize();
+      assert.equal(renewed.statusCode, 200, renewed.body);
+      assert.equal(renewed.json().data.vpn_session_id, vpnSessionId);
+      await pool.query("UPDATE vpn_nodes SET current_peers = 0 WHERE id = $1", [ids.node]);
+
+      await pool.query(
+        `UPDATE vpn_sessions SET created_at = now() - interval '10 minutes',
+           lease_expires_at = now() - interval '1 minute' WHERE id = $1`,
+        [vpnSessionId],
+      );
+      desiredPeerKey = `${"G".repeat(43)}=`;
+      const replacement = await authorize({
+        client_public_key: desiredPeerKey, country_code: "DE", region: "fra",
+      });
+      assert.equal(replacement.statusCode, 200, replacement.body);
+      assert.equal(replacement.json().data.client.assigned_ip, "10.88.0.2");
+      const old = await pool.query(
+        "SELECT status::text, disconnect_reason FROM vpn_sessions WHERE id = $1",
+        [vpnSessionId],
+      );
+      assert.equal(old.rows[0].status, "expired");
+      assert.equal(old.rows[0].disconnect_reason, "lease_expired");
+      vpnSessionId = replacement.json().data.vpn_session_id;
+    });
+
     const agentKeys = generateKeyPairSync("ed25519");
     let credentialId = "";
     await t.test("returns signed desired peer state and idempotent disconnect revocations", async () => {
@@ -187,7 +215,7 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
       const desired = await app.inject({ method: "POST", url: path, headers: signedHeaders(), payload: desiredBody });
       assert.equal(desired.statusCode, 200, desired.body);
       assert.equal(desired.json().data.peers[0].vpn_session_id, vpnSessionId);
-      assert.equal(desired.json().data.peers[0].public_key, peerKey);
+      assert.equal(desired.json().data.peers[0].public_key, desiredPeerKey);
 
       const disconnect = () => app.inject({ method: "POST", url: "/api/v1/vpn/disconnect",
         headers: { authorization: `Bearer ${token}` }, payload: {} });
@@ -196,7 +224,9 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
       const after = await app.inject({ method: "POST", url: path, headers: signedHeaders(), payload: desiredBody });
       assert.equal(after.statusCode, 200, after.body);
       assert.equal(after.json().data.peers.length, 0);
-      assert.equal(after.json().data.revocations[0].vpn_session_id, vpnSessionId);
+      assert.ok(after.json().data.revocations.some(
+        (revocation: { vpn_session_id: string }) => revocation.vpn_session_id === vpnSessionId,
+      ));
     });
 
     await t.test("account moderation atomically revokes active VPN leases", async () => {

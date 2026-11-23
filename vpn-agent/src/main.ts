@@ -17,6 +17,7 @@ async function run() {
   const client = new ControlClient({
     backendUrl: config.backendUrl, nodeId: config.nodeId,
     credentialId: identity.credentialId, privateKey: identity.privateKey,
+    maxAttempts: 1,
   });
   const adapter = new LinuxWireGuardAdapter(config.interface.name);
   const reconciler = new Reconciler(adapter, config.interface, config.managedPeersPath);
@@ -26,6 +27,7 @@ async function run() {
   let failures = 0;
   while (!stopping) {
     try {
+      await reconciler.expireLeases();
       const desired = await client.desiredState();
       await reconciler.reconcile(desired.peers);
       const snapshot = await adapter.snapshot();
@@ -39,9 +41,13 @@ async function run() {
       await delay(config.intervalMs);
     } catch (error) {
       failures += 1;
+      await reconciler.expireLeases().catch((expiryError) => {
+        process.stderr.write(`${JSON.stringify({ event: "lease_expiry_failed",
+          error: expiryError instanceof Error ? expiryError.message : "unknown error" })}\n`);
+      });
       process.stderr.write(`${JSON.stringify({ event: "reconcile_failed",
         error: error instanceof Error ? error.message : "unknown error" })}\n`);
-      await delay(Math.min(config.intervalMs * (2 ** Math.min(failures - 1, 4)), 60_000));
+      await delay(Math.min(config.intervalMs * (2 ** Math.min(failures - 1, 4)), 5_000));
     }
   }
 }

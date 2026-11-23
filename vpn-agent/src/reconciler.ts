@@ -3,7 +3,11 @@ import { dirname } from "node:path";
 
 import type { DesiredPeer, InterfaceConfig, WireGuardAdapter } from "./wireguard.js";
 
-type ManagedState = { version: 1; peers: Record<string, { allowedIp: string; configVersion: number }> };
+type ManagedState = { version: 1; peers: Record<string, {
+  allowedIp: string;
+  configVersion: number;
+  leaseExpiresAt?: string;
+}> };
 const emptyState = (): ManagedState => ({ version: 1, peers: {} });
 
 export class Reconciler {
@@ -33,14 +37,35 @@ export class Reconciler {
     await rename(temporary, this.stateFile);
   }
 
+  async expireLeases(now = Date.now()) {
+    await this.adapter.ensureInterface(this.interfaceConfig);
+    const previous = await this.loadState();
+    const actual = new Set((await this.adapter.listPeers()).map((peer) => peer.publicKey));
+    let changed = false;
+    for (const [publicKey, managed] of Object.entries(previous.peers)) {
+      const expiresAt = managed.leaseExpiresAt ? Date.parse(managed.leaseExpiresAt) : Number.NaN;
+      if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+        if (actual.has(publicKey)) await this.adapter.removePeer(publicKey);
+        delete previous.peers[publicKey];
+        changed = true;
+      }
+    }
+    if (changed) await this.saveState(previous);
+  }
+
   async reconcile(desiredPeers: DesiredPeer[]) {
     await this.adapter.ensureInterface(this.interfaceConfig);
     await this.adapter.ensureNat(this.interfaceConfig.egressInterface);
     const previous = await this.loadState();
     const actual = new Map((await this.adapter.listPeers()).map((peer) => [peer.publicKey, peer]));
-    const desired = new Map(desiredPeers.map((peer) => [peer.publicKey, peer]));
+    const now = Date.now();
+    const activePeers = desiredPeers.filter((peer) => {
+      const expiresAt = Date.parse(peer.leaseExpiresAt);
+      return Number.isFinite(expiresAt) && expiresAt > now;
+    });
+    const desired = new Map(activePeers.map((peer) => [peer.publicKey, peer]));
 
-    for (const peer of desiredPeers) {
+    for (const peer of activePeers) {
       const current = actual.get(peer.publicKey);
       if (!current || current.allowedIp !== peer.allowedIp ||
           previous.peers[peer.publicKey]?.configVersion !== peer.configVersion) {
@@ -50,8 +75,9 @@ export class Reconciler {
     for (const publicKey of Object.keys(previous.peers)) {
       if (!desired.has(publicKey) && actual.has(publicKey)) await this.adapter.removePeer(publicKey);
     }
-    await this.saveState({ version: 1, peers: Object.fromEntries(desiredPeers.map((peer) => [
-      peer.publicKey, { allowedIp: peer.allowedIp, configVersion: peer.configVersion },
+    await this.saveState({ version: 1, peers: Object.fromEntries(activePeers.map((peer) => [
+      peer.publicKey, { allowedIp: peer.allowedIp, configVersion: peer.configVersion,
+        leaseExpiresAt: peer.leaseExpiresAt },
     ])) });
   }
 }

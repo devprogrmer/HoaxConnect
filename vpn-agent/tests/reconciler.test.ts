@@ -7,17 +7,24 @@ import { test } from "node:test";
 import { Reconciler } from "../src/reconciler.js";
 import type { DesiredPeer, InterfaceConfig, PeerSnapshot, WireGuardAdapter } from "../src/wireguard.js";
 
-const peer = (key: string, ip: string, version = 1): DesiredPeer => ({
+const peer = (key: string, ip: string, version = 1, leaseExpiresAt = new Date(Date.now() + 300_000).toISOString()): DesiredPeer => ({
   vpnSessionId: `session-${key}`, publicKey: key, allowedIp: ip, configVersion: version,
-  leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+  leaseExpiresAt,
 });
 
 class FakeAdapter implements WireGuardAdapter {
   peers = new Map<string, PeerSnapshot>();
   calls: string[] = [];
   failKey: string | null = null;
-  async ensureInterface(config: InterfaceConfig) { this.calls.push(`interface:${config.name}`); }
-  async listPeers() { return [...this.peers.values()]; }
+  interfaceReady = false;
+  async ensureInterface(config: InterfaceConfig) {
+    this.interfaceReady = true;
+    this.calls.push(`interface:${config.name}`);
+  }
+  async listPeers() {
+    if (!this.interfaceReady) throw new Error("interface missing");
+    return [...this.peers.values()];
+  }
   async upsertPeer(value: DesiredPeer) {
     this.calls.push(`upsert:${value.publicKey}:${value.allowedIp}`);
     if (value.publicKey === this.failKey) throw new Error("partial apply");
@@ -77,6 +84,33 @@ test("partial apply leaves durable state unchanged and a retry converges", async
       peer("peer-a", "10.88.0.2/32"), peer("peer-b", "10.88.0.3/32"),
     ]);
     assert.equal(adapter.peers.size, 2);
+  } finally { await rm(state, { recursive: true, force: true }); }
+});
+
+test("expired leases are never installed and are removed without Backend access", async () => {
+  const state = await mkdtemp(join(tmpdir(), "hc-agent-expiry-"));
+  const stateFile = join(state, "managed-peers.json");
+  const adapter = new FakeAdapter();
+  adapter.peers.set("unmanaged", { publicKey: "unmanaged", allowedIp: "10.88.0.99/32" });
+  const config: InterfaceConfig = { name: "hcx0", address: "10.88.0.1/24", listenPort: 51820,
+    privateKeyPath: join(state, "wg.key"), egressInterface: "eth0" };
+  const reconciler = new Reconciler(adapter, config, stateFile);
+  try {
+    await reconciler.expireLeases();
+    assert.equal(adapter.interfaceReady, true);
+    await reconciler.reconcile([
+      peer("already-expired", "10.88.0.2/32", 1, new Date(Date.now() - 1_000).toISOString()),
+    ]);
+    assert.equal(adapter.peers.has("already-expired"), false);
+
+    const deadline = Date.now() + 30_000;
+    await reconciler.reconcile([
+      peer("leased", "10.88.0.3/32", 1, new Date(deadline).toISOString()),
+    ]);
+    assert.equal(adapter.peers.has("leased"), true);
+    await reconciler.expireLeases(deadline + 1);
+    assert.equal(adapter.peers.has("leased"), false);
+    assert.equal(adapter.peers.has("unmanaged"), true);
   } finally { await rm(state, { recursive: true, force: true }); }
 });
 

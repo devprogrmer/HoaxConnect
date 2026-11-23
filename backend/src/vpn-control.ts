@@ -11,6 +11,8 @@ export type VpnAuthorization = {
 
 type AuthIdentity = { userId: string; deviceId: string; sessionId: string };
 
+const liveStatuses = "('provisioning', 'active', 'disconnecting')";
+
 type NodeRow = {
   id: string;
   public_endpoint: string;
@@ -72,6 +74,16 @@ export async function authorizeVpnSession(
   auth: AuthIdentity,
   input: { clientPublicKey: string; countryCode?: string; region?: string },
 ): Promise<VpnAuthorization> {
+  const account = await client.query(
+    `SELECT id FROM users
+     WHERE id = $1 AND status = 'active' AND deleted_at IS NULL
+     FOR UPDATE`,
+    [auth.userId],
+  );
+  if (!account.rowCount) {
+    throw new ApiError(403, "ACCOUNT_UNAVAILABLE", "The account is not available for VPN access.");
+  }
+
   const device = await client.query(
     `SELECT id FROM devices WHERE id = $1 AND user_id = $2
        AND revoked_at IS NULL AND banned_at IS NULL FOR UPDATE`,
@@ -113,10 +125,11 @@ export async function authorizeVpnSession(
             n.public_key, n.tunnel_cidr::text,
             ARRAY(SELECT host(value) FROM unnest(n.dns_servers) AS value) AS dns_servers,
             n.agent_config_version::text,
-            (n.enabled AND n.status = 'online' AND n.last_seen_at > now() - interval '90 seconds'
-             AND n.current_peers < n.capacity_peers) AS node_available
+            (n.enabled AND n.status = 'online' AND
+             n.last_seen_at > now() - interval '90 seconds') AS node_available
      FROM vpn_sessions s JOIN vpn_nodes n ON n.id = s.vpn_node_id
-     WHERE s.device_id = $1 AND s.status IN ('provisioning', 'active', 'disconnecting')
+     WHERE s.device_id = $1 AND s.status IN ${liveStatuses}
+       AND s.lease_expires_at > now()
      FOR UPDATE OF s`,
     [auth.deviceId],
   );
@@ -133,7 +146,8 @@ export async function authorizeVpnSession(
 
   const activeCount = await client.query<{ count: number }>(
     `SELECT count(*)::int AS count FROM vpn_sessions
-     WHERE subscription_id = $1 AND status IN ('provisioning', 'active', 'disconnecting')`,
+     WHERE subscription_id = $1 AND status IN ${liveStatuses}
+       AND lease_expires_at > now()`,
     [entitlement.id],
   );
   if ((activeCount.rows[0]?.count ?? 0) >= entitlement.concurrent_session_limit) {
@@ -147,7 +161,12 @@ export async function authorizeVpnSession(
      FROM vpn_nodes
      WHERE enabled AND status = 'online'
        AND last_seen_at > now() - interval '90 seconds'
-       AND current_peers < capacity_peers
+       AND (current_peers < capacity_peers OR EXISTS (
+         SELECT 1 FROM vpn_sessions stale
+         WHERE stale.vpn_node_id = vpn_nodes.id
+           AND stale.status IN ${liveStatuses}
+           AND stale.lease_expires_at <= now()
+       ))
        AND tunnel_cidr IS NOT NULL AND listen_port IS NOT NULL
        AND ($1::text IS NULL OR country_code = $1)
        AND ($2::text IS NULL OR region = $2)
@@ -168,12 +187,39 @@ export async function authorizeVpnSession(
        SELECT 1 FROM vpn_sessions s
        WHERE s.vpn_node_id = $2
          AND s.assigned_ip = network($1::cidr)::inet + candidate.host_index::bigint
-         AND s.status IN ('provisioning', 'active', 'disconnecting')
+         AND s.status IN ${liveStatuses}
+         AND s.lease_expires_at > now()
      )
      ORDER BY candidate.host_index LIMIT 1`,
     [selected.tunnel_cidr, selected.id],
   );
   if (!address.rows[0]) throw new ApiError(503, "VPN_ADDRESS_POOL_EXHAUSTED", "The VPN node address pool is exhausted.");
+
+  const stale = await client.query<{ id: string; vpn_peer_id: string | null }>(
+    `SELECT id, vpn_peer_id FROM vpn_sessions
+     WHERE lease_expires_at <= now() AND status IN ${liveStatuses}
+       AND (device_id = $1 OR (vpn_node_id = $2 AND assigned_ip = $3::inet))
+     ORDER BY id FOR UPDATE`,
+    [auth.deviceId, selected.id, address.rows[0].assigned_ip],
+  );
+  const staleSessionIds = stale.rows.map((row) => row.id);
+  if (staleSessionIds.length) {
+    await client.query(
+      `UPDATE vpn_sessions SET status = 'expired', disconnected_at = now(),
+         disconnect_reason = 'lease_expired'
+       WHERE id = ANY($1::uuid[])`,
+      [staleSessionIds],
+    );
+    const stalePeerIds = stale.rows.flatMap((row) => row.vpn_peer_id ? [row.vpn_peer_id] : []);
+    if (stalePeerIds.length) {
+      await client.query(
+        `UPDATE vpn_peers SET status = 'revoked', revoked_at = COALESCE(revoked_at, now()),
+           revoke_reason = 'lease_expired', updated_at = now()
+         WHERE id = ANY($1::uuid[]) AND status IN ('pending', 'active')`,
+        [stalePeerIds],
+      );
+    }
+  }
 
   const peer = await client.query<{ id: string }>(
     `INSERT INTO vpn_peers (user_id, device_id, subscription_id, vpn_node_id,

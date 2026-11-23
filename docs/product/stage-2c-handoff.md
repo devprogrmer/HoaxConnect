@@ -567,11 +567,33 @@ Stage 5 isolated Linux tunnel checkpoint (2026-11-23):
   containers, namespace, interfaces, secrets, dedicated nftables table, and
   tagged forwarding rules. The four unrelated `hoaxnet-*` containers remained
   running/healthy and the Nginx configuration hash stayed unchanged.
-- Agent tests passed 7/7 on Windows and Linux after the non-root capability and
-  scoped-forwarding fixes. The full Backend suite passed 62/62 against
+- Agent tests passed 9/9 on Windows after the non-root capability,
+  lease-expiry, and scoped-forwarding fixes. The full Backend suite passed 63/63 against
   disposable PostgreSQL 18 with migrations 001 through 008. Backend build and
   Agent build passed. The test did not deploy a persistent node or publish a
   desktop release.
+
+Stage 5 final recovery and expiry checkpoint (2026-11-23):
+
+- Expired VPN sessions no longer consume subscription concurrency, node
+  capacity, device uniqueness, or tunnel addresses. Renewal of an existing
+  healthy session remains valid when its node is at reported capacity.
+- Authorization locks the active account row before device and subscription
+  work, so moderation and VPN authorization serialize on the same account.
+- The node agent persists lease deadlines, rejects already-expired desired
+  peers, and removes expired managed peers even while the Backend is
+  unavailable. It initializes its WireGuard interface before local fail-closed
+  expiry checks on a fresh host.
+- NAT and forwarding rule ownership includes the tunnel CIDR. Reconciliation
+  removes only stale exact HoaxConnect-owned markers and preserves foreign or
+  prefix-similar rules in shared Docker chains.
+- The full Backend suite passed 63/63 on disposable PostgreSQL 18. Electron
+  tests passed 35/35, Agent tests passed 9/9, UI/Admin/Backend/Agent builds
+  passed, and the real WireGuard UDP/HTTPS/revoke E2E passed again with public
+  egress `194.26.64.241`.
+- `docs/product/vpn-node-deployment.md` now records host package installation,
+  persistent IPv4 forwarding, exact rollback ownership, and total-node-loss
+  recovery. It intentionally excludes all production secrets and private keys.
 
 Still unverified / next starting point:
 

@@ -50,12 +50,10 @@ cleanup_runtime() {
   ip link del "$HC_SERVER_IF" >/dev/null 2>&1
   ip link del "$HC_VETH_HOST" >/dev/null 2>&1
   if test -n "${HC_EGRESS:-}"; then
-    for suffix in in out; do
-      marker="hoaxconnect-forward-${HC_SERVER_IF}-${HC_EGRESS}-${suffix}"
-      for handle in $(nft -a list chain ip filter DOCKER-USER 2>/dev/null | \
-        awk -v marker="$marker" 'index($0, marker) {print $NF}'); do
-        nft delete rule ip filter DOCKER-USER handle "$handle" >/dev/null 2>&1 || true
-      done
+    marker="hoaxconnect-forward-${HC_SERVER_IF}-${HC_EGRESS}-"
+    for handle in $(nft -a list chain ip filter DOCKER-USER 2>/dev/null | \
+      awk -v marker="$marker" 'index($0, marker) {print $NF}'); do
+      nft delete rule ip filter DOCKER-USER handle "$handle" >/dev/null 2>&1 || true
     done
   fi
   if test "$HC_NFT_OWNED" = 1; then nft delete table inet hoaxconnect >/dev/null 2>&1; fi
