@@ -374,6 +374,28 @@ test(
           });
         }
 
+        if (parsedUrl.pathname === "/api/v1/vpn/authorize") {
+          return jsonResponse({
+            data: {
+              vpn_session_id: "vpn-session-1",
+              node: {
+                id: "vpn-node-1",
+                endpoint: "198.51.100.20:51820",
+                public_key: `${"B".repeat(43)}=`,
+              },
+              client: {
+                assigned_ip: "10.88.0.2",
+                dns_servers: ["1.1.1.1"],
+              },
+              lease_expires_at: "2030-01-01T00:05:00.000Z",
+            },
+          });
+        }
+
+        if (parsedUrl.pathname === "/api/v1/vpn/disconnect") {
+          return jsonResponse({ data: { disconnected: true } });
+        }
+
         assert.equal(
           parsedUrl.pathname,
           "/api/v1/auth/device-proof"
@@ -482,6 +504,17 @@ test(
         "error"
       );
       assert.ok(requests[0].options.signal);
+
+      const vpnAuthorization = await owner.authorizeVpn({
+        clientPublicKey: `${"A".repeat(43)}=`,
+        countryCode: "DE",
+      });
+      assert.equal(vpnAuthorization.node.id, "vpn-node-1");
+      assert.equal(
+        requests.at(-1).options.headers.authorization,
+        "Bearer access-secret"
+      );
+      assert.deepEqual(await owner.disconnectVpn(), { disconnected: true });
 
       const returned = JSON.stringify(result);
       for (const secret of [

@@ -16,6 +16,9 @@ const {
   canonicalDeviceProofPayload,
   signDeviceProof,
 } = require("./device-identity.cjs");
+const {
+  createVpnApi,
+} = require("../vpn-api.cjs");
 
 const ERROR_MESSAGES = Object.freeze({
   SECURE_STORAGE_UNAVAILABLE:
@@ -664,6 +667,24 @@ function createElectronAuthOwner({
     }
   }
 
+  async function requestAuthenticated(pathname, payload) {
+    if (!accessToken) {
+      throw authError("AUTH_REJECTED");
+    }
+    try {
+      return await postJson(pathname, payload, accessToken);
+    } catch (error) {
+      if (error?.backendCode !== "INVALID_ACCESS_TOKEN") throw error;
+      const renewed = await restore();
+      if (!renewed.ok || !accessToken) {
+        throw authError("AUTH_REJECTED");
+      }
+      return await postJson(pathname, payload, accessToken);
+    }
+  }
+
+  const vpnApi = createVpnApi({ requestAuthenticated });
+
   return Object.freeze({
     getState,
     restore: () => serial(restore),
@@ -674,6 +695,12 @@ function createElectronAuthOwner({
     },
     register(input) {
       return serial(() => authenticate("register", input));
+    },
+    authorizeVpn(input) {
+      return serial(() => vpnApi.authorize(input));
+    },
+    disconnectVpn() {
+      return serial(() => vpnApi.disconnect());
     },
     reportDeviceState(payload, expectedDeviceId) {
       return serial(async () => {
