@@ -49,7 +49,7 @@ type Page =
   | "subscription"
   | "settings";
 
-type ConnectionState = "idle" | "connecting" | "connected";
+type ConnectionState = HoaxVpnConnectionStatus;
 
 type ModalType = null | "forgot" | "register" | "buy";
 
@@ -528,6 +528,7 @@ export default function App() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [connection, setConnection] =
     useState<ConnectionState>("idle");
+  const [vpnError, setVpnError] = useState("");
 
   async function performSignOut(allDevices: boolean) {
     if (logoutBusy) return;
@@ -542,6 +543,9 @@ export default function App() {
 
     setLogoutBusy(true);
     try {
+      if (window.hoax?.vpn) {
+        await window.hoax.vpn.disconnect();
+      }
       const result = allDevices
         ? await auth.logoutAll()
         : await auth.logout();
@@ -626,6 +630,33 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const vpn = window.hoax?.vpn;
+    if (!loggedIn || !vpn) return;
+    const vpnApi = vpn;
+    let disposed = false;
+    let busy = false;
+    async function refreshVpnState() {
+      if (disposed || busy) return;
+      busy = true;
+      try {
+        const result = await vpnApi.status();
+        if (!disposed && result.ok) {
+          setConnection(result.state.status);
+          setVpnError(result.state.error?.message || "");
+        }
+      } finally {
+        busy = false;
+      }
+    }
+    void refreshVpnState();
+    const timer = window.setInterval(refreshVpnState, 2000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [loggedIn]);
+
   const [selectedServerId, setSelectedServerId] = useState(SERVERS[0].id);
   const [results, setResults] = useState<Record<string, ServerResult>>({});
   const [testingServer, setTestingServer] = useState<string | null>(null);
@@ -679,17 +710,6 @@ export default function App() {
 
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  useEffect(() => {
-    if (connection !== "connected") return;
-
-    const interval = window.setInterval(() => {
-      setDownload((old) => Number((old + 0.013).toFixed(3)));
-      setUpload((old) => Number((old + 0.003).toFixed(3)));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [connection]);
 
   useEffect(() => {
     if (
@@ -815,25 +835,46 @@ export default function App() {
 
   async function toggleConnection() {
     if (connection === "connected") {
-      setConnection("idle");
+      const vpn = window.hoax?.vpn;
+      if (!vpn) {
+        notify("The HoaxConnect tunnel service is unavailable.");
+        return;
+      }
+      setConnection("disconnecting");
+      const result = await vpn.disconnect();
+      if (!result.ok) {
+        setConnection("error");
+        setVpnError(result.error.message);
+        notify(result.error.message);
+        return;
+      }
+      setConnection(result.state.status);
+      setVpnError("");
       setDownload(0);
       setUpload(0);
       notify("Disconnected.");
       return;
     }
 
-    if (connection === "connecting") return;
+    if (connection === "connecting" || connection === "disconnecting") return;
 
-    setConnection("connecting");
-
-    if (!results[selectedServer.id]) {
-      await testServer(selectedServer);
+    const vpn = window.hoax?.vpn;
+    if (!vpn) {
+      notify("The HoaxConnect tunnel service is unavailable.");
+      return;
     }
 
-    await sleep(700);
-
-    setConnection("connected");
-    notify(`Connected to ${selectedServer.name}`);
+    setConnection("connecting");
+    setVpnError("");
+    const result = await vpn.connect({ countryCode: selectedServer.countryCode.toUpperCase() });
+    if (!result.ok) {
+      setConnection("error");
+      setVpnError(result.error.message);
+      notify(result.error.message);
+      return;
+    }
+    setConnection(result.state.status);
+    notify(`Connected through ${selectedServer.country}.`);
   }
 
   async function scanGameNow(
@@ -1105,6 +1146,10 @@ export default function App() {
                 ? "CONNECTION SECURED"
                 : connection === "connecting"
                   ? "CONNECTING..."
+                  : connection === "disconnecting"
+                    ? "DISCONNECTING..."
+                    : connection === "error"
+                      ? "CONNECTION ERROR"
                   : "READY TO CONNECT"}
             </div>
 
@@ -1118,7 +1163,7 @@ export default function App() {
               <span className="powerHalo haloTwo" />
 
               <div>
-                {connection === "connecting" ? (
+                {connection === "connecting" || connection === "disconnecting" ? (
                   <RefreshCw className="spin" size={41} />
                 ) : (
                   <Power size={41} strokeWidth={1.8} />
@@ -1131,12 +1176,18 @@ export default function App() {
                 ? "Connected"
                 : connection === "connecting"
                   ? "Connecting..."
+                  : connection === "disconnecting"
+                    ? "Disconnecting..."
+                    : connection === "error"
+                      ? "Connection failed"
                   : "Not connected"}
             </h2>
 
             <p>
               {connection === "connected"
                 ? `Protected through ${selectedServer.name}`
+                : connection === "error" && vpnError
+                  ? vpnError
                 : "Select a route and connect to HoaxConnect."}
             </p>
 

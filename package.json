@@ -1,7 +1,7 @@
 {
   "name": "hoaxconnect",
   "private": true,
-  "version": "0.3.10",
+  "version": "0.4.0",
   "description": "Windows gaming network diagnostics and VPN client",
   "author": "HoaxConnect",
   "type": "module",
@@ -16,9 +16,11 @@
     "dev:admin": "vite --config admin/vite.config.ts",
     "build:admin": "tsc -p admin/tsconfig.json && vite build --config admin/vite.config.ts",
     "dist": "npm run build:ui && electron-builder",
-    "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
+    "build:tunnel-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-tunnel-service.ps1",
+    "dist:win": "npm run build:tunnel-service && npm run build:ui && electron-builder --win nsis --x64 --publish never",
     "test:electron": "node --test electron/tests/*.test.cjs",
     "test:device-ui": "node --import ./backend/node_modules/tsx/dist/loader.mjs scripts/test-device-reporting.mjs",
+    "test:vpn-ui": "node --test scripts/tests/real-vpn-ui.test.mjs",
     "test:update-artifacts": "node --test scripts/tests/verify-windows-update.test.mjs"
   },
   "dependencies": {
@@ -67,10 +69,11 @@
       ],
       "artifactName": "HoaxConnect-${version}-Setup.${ext}",
       "icon": "build/icon.ico",
-      "requestedExecutionLevel": "requireAdministrator"
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
@@ -78,7 +81,8 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
-      "differentialPackage": true
+      "differentialPackage": true,
+      "include": "build/tunnel-service.nsh"
     },
     "publish": [
       {
@@ -90,6 +94,18 @@
       {
         "from": "native-bin/HoaxTraffic.exe",
         "to": "traffic/HoaxTraffic.exe"
+      },
+      {
+        "from": "native-bin/service",
+        "to": "tunnel-service"
+      },
+      {
+        "from": "build/install-tunnel-service.ps1",
+        "to": "tunnel-service/install-service.ps1"
+      },
+      {
+        "from": "native-bin/routing",
+        "to": "tunnel-service/routing"
       }
     ]
   }

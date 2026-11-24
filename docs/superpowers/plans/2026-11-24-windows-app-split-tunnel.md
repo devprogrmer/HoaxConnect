@@ -4,9 +4,9 @@
 
 **Goal:** Deliver a real selected-application Windows tunnel controlled by HoaxConnect Electron and backed by the Stage 5 VPN control plane.
 
-**Architecture:** Electron remains unprivileged and coordinates Backend authorization with an ACL-restricted LocalSystem service. The service owns keys, WireGuardNT, WFP policies, lease enforcement and recovery; platform-neutral contracts make safety behavior testable before Windows E2E.
+**Architecture:** Electron remains unprivileged and coordinates Backend authorization with an ACL-restricted LocalSystem service. The service owns keys, a pinned sing-box Windows TUN/WireGuard engine, lease enforcement and recovery; platform-neutral contracts make safety behavior testable before Windows E2E.
 
-**Tech Stack:** Electron/CommonJS, React/TypeScript, Node test runner, .NET 8 Windows Service, WireGuardNT, Windows Filtering Platform, NSIS/electron-builder.
+**Tech Stack:** Electron/CommonJS, React/TypeScript, Node test runner, .NET 8 Windows Service, pinned sing-box, Windows TUN/WFP support supplied by the engine, NSIS/electron-builder.
 
 **Spec:** `docs/superpowers/specs/2026-11-24-windows-app-split-tunnel-design.md`
 
@@ -82,20 +82,20 @@
 - [ ] Run all .NET tests on Windows and build `win-x64` service artifacts.
 - [ ] Commit `feat: add privileged Windows tunnel service`.
 
-### Task 4: WireGuardNT and WFP Selected-App Enforcement
+### Task 4: TUN/WireGuard Selected-App Enforcement
 
 **Files:**
-- Create: WireGuardNT adapter and WFP policy files under `native/HoaxConnect.Service/Platform/Windows`.
+- Create: sing-box configuration, process supervision and integrity files under `native/HoaxConnect.Service/Platform/Windows`.
 - Test: Windows integration harness under `native/HoaxConnect.Service.IntegrationTests`.
 
 **Interfaces:**
 - Consumes: Task 3 tunnel platform abstraction.
-- Produces: adapter lifecycle and per-executable/descendant IPv4, IPv6 and DNS policy with owned-rule cleanup.
+- Produces: strict TUN lifecycle and per-executable IPv4, IPv6 and DNS routing with owned-process cleanup.
 
 - [ ] Write Windows integration tests that initially fail with the fake platform.
-- [ ] Implement WireGuardNT adapter ownership and WFP ALE rules with fail-closed selected-process policy.
+- [ ] Implement pinned-engine integrity checking, configuration generation and fail-closed selected-process policy.
 - [ ] Prove selected and unselected processes take different egress paths and that DNS/IPv6 do not leak.
-- [ ] Commit `feat: enforce selected-app routing with WireGuardNT and WFP`.
+- [ ] Commit `feat: enforce selected-app routing with the Windows TUN engine`.
 
 ### Task 5: Replace Simulated UI Connection
 

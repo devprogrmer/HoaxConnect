@@ -1,0 +1,48 @@
+name: Windows
+
+on:
+  push:
+    branches:
+      - main
+      - codex/**
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:electron
+      - run: npm run test:vpn-ui
+      - run: npm run build
+
+      - name: Fetch pinned routing engine
+        shell: powershell
+        run: ./scripts/fetch-windows-routing-engine.ps1
+
+      - name: Test Windows tunnel service
+        shell: powershell
+        run: |
+          $env:HC_SING_BOX_PATH = (Resolve-Path './native-bin/routing/sing-box.exe').Path
+          dotnet test ./native/HoaxConnect.Service.Tests/HoaxConnect.Service.Tests.csproj --configuration Release -p:NuGetAudit=false
+
+      - name: Publish Windows tunnel service
+        shell: powershell
+        run: npm run build:tunnel-service
