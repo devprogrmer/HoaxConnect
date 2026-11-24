@@ -302,6 +302,37 @@
   outline-offset: -3px;
 }
 
+.splitCatalog {
+  margin: 18px 0;
+}
+
+.splitCatalogGame:disabled {
+  cursor: default;
+}
+
+.splitCatalogGame strong {
+  color: #d3dae2;
+}
+
+.splitCatalogArtwork {
+  width: 100%;
+  aspect-ratio: 460 / 215;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #10161c;
+}
+
+.splitCatalogArtwork img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .splitApp .splitCheck {
   position: absolute;
   right: 8px;

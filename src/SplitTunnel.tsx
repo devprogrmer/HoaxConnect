@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import "./SplitTunnel.css";
+import { appCatalog, gameArtwork, gameCatalog } from "./game-catalog";
 
 const DEFAULT_STATE:
   HoaxSplitTunnelState = {
@@ -143,6 +144,18 @@ export default function SplitTunnel({ connection, onConnect }: {
             .includes(query)
       );
     }, [apps, search]);
+
+  const catalogSections = [
+    { title: "Game catalog", entries: gameCatalog },
+    { title: "App catalog", entries: appCatalog },
+  ].map(({ title, entries }) => ({
+    title,
+    entries: entries.filter(({ name, executables }) => {
+      const query = search.trim().toLowerCase();
+      return name.toLowerCase().includes(query) ||
+        executables.some((executable) => executable.includes(query));
+    }),
+  }));
 
   function toggleApp(
     app: HoaxInstalledApp
@@ -303,9 +316,7 @@ export default function SplitTunnel({ connection, onConnect }: {
           </h2>
 
           <p>
-            Choose which Windows
-            applications should use
-            HoaxConnect.
+            Tick the games or apps you want to connect, then choose Connect selected.
           </p>
         </div>
 
@@ -332,7 +343,7 @@ export default function SplitTunnel({ connection, onConnect }: {
             </span>
 
             <strong>
-              Choose apps
+              Find games and apps
             </strong>
           </div>
 
@@ -373,9 +384,46 @@ export default function SplitTunnel({ connection, onConnect }: {
                 event.target.value
               )
             }
-            placeholder="Search installed applications..."
+            placeholder="Search games and apps…"
           />
         </div>
+
+        {catalogSections.map(({ title, entries }) => entries.length > 0 && (
+          <section key={title} className="splitCatalog" aria-label={title}>
+            <h3>{title}</h3>
+            <div className="splitAppList">
+              {entries.map((game) => {
+                const installed = apps.filter((app) =>
+                  game.executables.some((exe) => exe === app.exeName.toLowerCase())
+                );
+                const match = installed.length === 1 ? installed[0] : undefined;
+                const selected = match ? selectedIDs.has(match.id) : false;
+                const artwork = game.steamId ? gameArtwork(game.steamId) : match?.icon;
+                return (
+                  <button
+                    key={game.name}
+                    type="button"
+                    className={`splitApp splitCatalogGame${selected ? " splitAppSelected" : ""}`}
+                    aria-pressed={selected}
+                    disabled={!match}
+                    onClick={() => { if (match) toggleApp(match); }}
+                  >
+                    <div className="splitCatalogArtwork">
+                      <AppWindow size={24} aria-hidden="true" />
+                      {artwork && <img src={artwork} alt="" loading="lazy"
+                        style={game.steamId ? undefined : { objectFit: "contain" }}
+                        referrerPolicy="no-referrer"
+                        onError={(event) => { event.currentTarget.hidden = true; }} />}
+                    </div>
+                    <strong>{game.name}</strong>
+                    <span>{match ? (selected ? "Selected" : "Available") :
+                      installed.length > 1 ? "Choose an executable below" : "Not detected"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
 
         {error && (
           <div className="splitError">
@@ -394,6 +442,8 @@ export default function SplitTunnel({ connection, onConnect }: {
             applications...
           </div>
         ) : (
+          <>
+          <h3>Your Windows apps</h3>
           <div className="splitAppList">
             {visibleApps.map(
               (app) => {
@@ -477,6 +527,7 @@ export default function SplitTunnel({ connection, onConnect }: {
                 </div>
               )}
           </div>
+          </>
         )}
 
         <div className="splitFooter">
@@ -491,8 +542,9 @@ export default function SplitTunnel({ connection, onConnect }: {
             </strong>
 
             <span>
-              Settings are stored locally
-              on this Windows device.
+              {state.selectedApps.length === 0
+                ? "Select at least one game or app to connect."
+                : "Only the selected apps use the tunnel."}
             </span>
           </div>
 
@@ -515,7 +567,7 @@ export default function SplitTunnel({ connection, onConnect }: {
             >
               {connection === "connected" ? "Disconnect" :
                 connection === "disconnecting" ? "Disconnecting…" :
-                saving || connection === "connecting" ? "Connecting…" : "Connect"}
+                saving || connection === "connecting" ? "Connecting…" : "Connect selected"}
             </button>
           </div>
         </div>

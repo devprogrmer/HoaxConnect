@@ -1157,7 +1157,15 @@ export default function App() {
               className={`powerButton ${
                 connection === "connected" ? "powerOn" : ""
               }`}
-              onClick={toggleConnection}
+              aria-label={connection === "connected" ? "Disconnect" : "Choose apps to connect"}
+              disabled={connection === "connecting" || connection === "disconnecting"}
+              onClick={() => {
+                if (connection === "connected") {
+                  void toggleConnection();
+                  return;
+                }
+                setPage("split-tunnel");
+              }}
             >
               <span className="powerHalo haloOne" />
               <span className="powerHalo haloTwo" />
