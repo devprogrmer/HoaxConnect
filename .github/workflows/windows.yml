@@ -58,6 +58,20 @@ jobs:
           $version = node -p "require('./package.json').version"
           node ./scripts/verify-windows-update.mjs ./release $version
 
+      - name: Smoke test the installed Windows service
+        shell: powershell
+        run: |
+          $version = node -p "require('./package.json').version"
+          $installer = (Resolve-Path "./release/HoaxConnect-$version-Setup.exe").Path
+          $setup = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Setup exited with code $($setup.ExitCode)" }
+          $service = Get-CimInstance Win32_Service -Filter "Name='HoaxConnectTunnel'"
+          if ($service.State -ne 'Running' -or $service.StartName -ne 'LocalSystem') {
+            throw 'Setup did not start the HoaxConnect service as LocalSystem.'
+          }
+          node ./scripts/smoke-installed-tunnel.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
           name: HoaxConnect-Windows-x64
