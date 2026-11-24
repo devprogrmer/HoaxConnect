@@ -26,9 +26,10 @@ public sealed class TunnelCoordinator(ITunnelPlatform platform)
         try
         {
             if (_status.Generation == request.Generation && _status.Status == "connected") return;
-            if (_status.Generation is not null && StringComparer.Ordinal.Compare(request.Generation, _status.Generation) < 0)
+            // Connection IDs are opaque UUIDs. Never replace a live tunnel with
+            // another request until the current owner disconnects it.
+            if (_status.Status == "connected")
                 throw new StaleGenerationException();
-            if (_status.Status == "connected") await platform.DisconnectAsync(_status.Generation!, cancellationToken);
 
             _status = new("connecting", request.Generation, request.Authorization.LeaseExpiresAt);
             try

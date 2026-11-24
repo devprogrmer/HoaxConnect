@@ -29,8 +29,8 @@ public static class SingBoxConfigBuilder
                     address = new[] { "172.19.0.1/30", "fdfe:dcba:9876::1/126" },
                     mtu = 1400,
                     auto_route = true,
-                    strict_route = true,
-                    dns_mode = "hijack",
+                    strict_route = false,
+                    dns_mode = "disabled",
                 }
             },
             endpoints = new object[]
@@ -61,7 +61,6 @@ public static class SingBoxConfigBuilder
                 auto_detect_interface = true,
                 rules = new object[]
                 {
-                    new { port = new[] { 53 }, action = "route", outbound = "wg" },
                     new { process_path = request.ApplicationPaths, action = "route", outbound = "wg" },
                 },
                 final = "direct",

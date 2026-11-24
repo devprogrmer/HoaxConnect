@@ -8,7 +8,7 @@ namespace HoaxConnect.Service.Tests;
 public sealed class SingBoxConfigBuilderTests
 {
     [Fact]
-    public void BuildsStrictSelectedProcessWireGuardRoutingWithDirectFallback()
+    public void RoutesSelectedProcessesWithoutCapturingSystemDns()
     {
         var request = new ConnectRequest(
             "generation-1",
@@ -20,7 +20,8 @@ public sealed class SingBoxConfigBuilderTests
         var tun = root.GetProperty("inbounds")[0];
         Assert.Equal("tun", tun.GetProperty("type").GetString());
         Assert.True(tun.GetProperty("auto_route").GetBoolean());
-        Assert.True(tun.GetProperty("strict_route").GetBoolean());
+        Assert.False(tun.GetProperty("strict_route").GetBoolean());
+        Assert.Equal("disabled", tun.GetProperty("dns_mode").GetString());
 
         var endpoint = root.GetProperty("endpoints")[0];
         Assert.Equal("wireguard", endpoint.GetProperty("type").GetString());
@@ -31,7 +32,7 @@ public sealed class SingBoxConfigBuilderTests
         var route = root.GetProperty("route");
         Assert.True(route.GetProperty("auto_detect_interface").GetBoolean());
         Assert.Equal("direct", route.GetProperty("final").GetString());
-        var selectedRule = route.GetProperty("rules").EnumerateArray().Single(rule => rule.TryGetProperty("process_path", out _));
+        var selectedRule = Assert.Single(route.GetProperty("rules").EnumerateArray());
         Assert.Equal("wg", selectedRule.GetProperty("outbound").GetString());
         Assert.Equal(2, selectedRule.GetProperty("process_path").GetArrayLength());
     }

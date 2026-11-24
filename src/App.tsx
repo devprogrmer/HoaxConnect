@@ -522,7 +522,7 @@ export default function App() {
   const [authChecking, setAuthChecking] = useState(
     Boolean(window.hoax?.auth)
   );
-  const [page, setPage] = useState<Page>("dashboard");
+  const [page, setPage] = useState<Page>("split-tunnel");
   const [modal, setModal] = useState<ModalType>(null);
   const [toast, setToast] = useState("");
   const [logoutBusy, setLogoutBusy] = useState(false);
@@ -994,7 +994,7 @@ export default function App() {
       ["game-test", "Game Test", <Gamepad2 size={19} />],
       ["network", "Network Test", <Activity size={19} />],
       ["network-doctor", "Network Doctor", <Activity size={19} />],
-      ["split-tunnel", "Split Tunnel", <Network size={19} />],
+      ["split-tunnel", "Games & Apps", <Network size={19} />],
     ] as const;
 
     return (
@@ -2212,11 +2212,11 @@ export default function App() {
         return (
           <>
             <PageHeader
-              eyebrow="APPLICATION ROUTING"
-              title="Split Tunnel"
+              eyebrow="YOUR LIBRARY"
+              title="Games & Apps"
             />
 
-            <SplitTunnel />
+            <SplitTunnel connection={connection} onConnect={toggleConnection} />
           </>
         );
 

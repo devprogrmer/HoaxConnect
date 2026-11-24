@@ -4,9 +4,6 @@ import {
   FolderOpen,
   RefreshCw,
   Search,
-  Shield,
-  Wifi,
-  X,
 } from "lucide-react";
 
 import {
@@ -24,7 +21,10 @@ const DEFAULT_STATE:
     updatedAt: null,
   };
 
-export default function SplitTunnel() {
+export default function SplitTunnel({ connection, onConnect }: {
+  connection: string;
+  onConnect: () => Promise<void>;
+}) {
   const [
     apps,
     setApps,
@@ -247,12 +247,12 @@ export default function SplitTunnel() {
       const result =
         await window.hoax
           .splitTunnel
-          .save(state);
+          .save({ ...state, mode: "selected-only" });
 
       setState(result);
 
       setSavedMessage(
-        "Split Tunnel settings saved."
+        "App selection saved."
       );
 
       window.setTimeout(
@@ -260,6 +260,7 @@ export default function SplitTunnel() {
           setSavedMessage(""),
         2200
       );
+      return true;
     } catch (error) {
       setError(
         error instanceof Error
@@ -298,7 +299,7 @@ export default function SplitTunnel() {
           </span>
 
           <h2>
-            Split Tunnel
+            Your apps
           </h2>
 
           <p>
@@ -320,120 +321,6 @@ export default function SplitTunnel() {
                 .length
             }
           </strong>
-        </div>
-      </section>
-
-      <section className="splitModeCard">
-        <span className="splitSectionTitle">
-          ROUTING MODE
-        </span>
-
-        <div className="splitModes">
-          <button
-            className={
-              state.mode ===
-              "selected-only"
-                ? "splitModeActive"
-                : ""
-            }
-            onClick={() =>
-              setState((old) => ({
-                ...old,
-                mode:
-                  "selected-only",
-              }))
-            }
-          >
-            <div className="splitModeIcon">
-              <Wifi size={20} />
-            </div>
-
-            <div>
-              <strong>
-                Selected Apps Only
-              </strong>
-
-              <span>
-                Only selected apps will
-                use HoaxConnect.
-              </span>
-            </div>
-
-            {state.mode ===
-              "selected-only" && (
-              <Check size={18} />
-            )}
-          </button>
-
-          <button
-            className={
-              state.mode === "all"
-                ? "splitModeActive"
-                : ""
-            }
-            onClick={() =>
-              setState((old) => ({
-                ...old,
-                mode: "all",
-              }))
-            }
-          >
-            <div className="splitModeIcon">
-              <Shield size={20} />
-            </div>
-
-            <div>
-              <strong>
-                All Traffic
-              </strong>
-
-              <span>
-                Route the whole device
-                through HoaxConnect.
-              </span>
-            </div>
-
-            {state.mode ===
-              "all" && (
-              <Check size={18} />
-            )}
-          </button>
-
-          <button
-            className={
-              state.mode ===
-              "exclude-selected"
-                ? "splitModeActive"
-                : ""
-            }
-            onClick={() =>
-              setState((old) => ({
-                ...old,
-                mode:
-                  "exclude-selected",
-              }))
-            }
-          >
-            <div className="splitModeIcon">
-              <X size={20} />
-            </div>
-
-            <div>
-              <strong>
-                All Except Selected
-              </strong>
-
-              <span>
-                Selected apps stay on
-                direct internet.
-              </span>
-            </div>
-
-            {state.mode ===
-              "exclude-selected" && (
-              <Check size={18} />
-            )}
-          </button>
         </div>
       </section>
 
@@ -526,6 +413,7 @@ export default function SplitTunnel() {
                     onClick={() =>
                       toggleApp(app)
                     }
+                    aria-pressed={selected}
                   >
                     <div className="splitAppIcon">
                       {app.icon ? (
@@ -618,35 +506,21 @@ export default function SplitTunnel() {
 
             <button
               className="splitSave"
-              onClick={save}
-              disabled={saving}
+              onClick={async () => {
+                if (connection === "connected" || await save()) await onConnect();
+              }}
+              disabled={saving || connection === "connecting" ||
+                connection === "disconnecting" ||
+                (connection !== "connected" && state.selectedApps.length === 0)}
             >
-              {saving
-                ? "SAVING..."
-                : "SAVE SETTINGS"}
+              {connection === "connected" ? "Disconnect" :
+                connection === "disconnecting" ? "Disconnecting…" :
+                saving || connection === "connecting" ? "Connecting…" : "Connect"}
             </button>
           </div>
         </div>
       </section>
 
-      <div className="splitEngineNotice">
-        <Shield size={16} />
-
-        <div>
-          <strong>
-            Routing engine status:
-            configuration ready
-          </strong>
-
-          <span>
-            App discovery and selection
-            are active. Per-process VPN
-            enforcement will become active
-            when the HoaxConnect VPN/WFP
-            service is installed.
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

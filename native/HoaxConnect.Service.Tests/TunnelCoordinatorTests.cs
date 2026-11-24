@@ -30,6 +30,23 @@ public sealed class TunnelCoordinatorTests
         Assert.Single(platform.Calls, call => call == "connect:generation-b");
         await Assert.ThrowsAsync<StaleGenerationException>(() =>
             coordinator.ConnectAsync(Request("generation-a"), CancellationToken.None));
+        await Assert.ThrowsAsync<StaleGenerationException>(() =>
+            coordinator.ConnectAsync(Request("generation-z"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FailedAttemptDoesNotBlockNewUnorderedGeneration()
+    {
+        var platform = new FakePlatform { FailNextConnect = true };
+        var coordinator = new TunnelCoordinator(platform);
+        await coordinator.InitializeAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            coordinator.ConnectAsync(Request("generation-z"), CancellationToken.None));
+
+        await coordinator.ConnectAsync(Request("generation-a"), CancellationToken.None);
+        Assert.Equal("connected", coordinator.Status.Status);
+        Assert.Equal("generation-a", coordinator.Status.Generation);
     }
 
     [Fact]
@@ -80,7 +97,14 @@ public sealed class TunnelCoordinatorTests
     {
         public List<string> Calls { get; } = [];
         public Task CleanupOwnedStateAsync(CancellationToken cancellationToken) { Calls.Add("cleanup"); return Task.CompletedTask; }
-        public Task ConnectAsync(ConnectRequest request, CancellationToken cancellationToken) { Calls.Add($"connect:{request.Generation}"); return Task.CompletedTask; }
+        public bool FailNextConnect { get; set; }
+        public Task ConnectAsync(ConnectRequest request, CancellationToken cancellationToken)
+        {
+            Calls.Add($"connect:{request.Generation}");
+            if (!FailNextConnect) return Task.CompletedTask;
+            FailNextConnect = false;
+            return Task.FromException(new IOException("Simulated tunnel startup failure."));
+        }
         public Task DisconnectAsync(string generation, CancellationToken cancellationToken) { Calls.Add($"disconnect:{generation}"); return Task.CompletedTask; }
     }
 }
