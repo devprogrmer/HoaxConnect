@@ -12,6 +12,9 @@ const path = require("path");
 const { createElectronAuthOwner } = require("./auth/auth-owner.cjs");
 const { isTrustedAuthSender } = require("./auth/ipc-guard.cjs");
 const { createDeviceReporter } = require("./device-reporting.cjs");
+const { createVpnConnection } = require("./vpn-connection.cjs");
+const { createVpnServiceClient } = require("./vpn-service-client.cjs");
+const { createVpnIpcHandlers } = require("./vpn-ipc.cjs");
 
 const {
   pingHost,
@@ -497,6 +500,17 @@ function registerAuthIPC() {
       }
     },
   });
+  const vpnConnection = createVpnConnection({
+    api: {
+      authorize: (input) => authOwner.authorizeVpn(input),
+      disconnect: () => authOwner.disconnectVpn(),
+    },
+    service: createVpnServiceClient(),
+  });
+  const vpnHandlers = createVpnIpcHandlers({
+    connection: vpnConnection,
+    readSplitState,
+  });
   reporter.start();
   let quitting = false;
   app.on("before-quit", (event) => {
@@ -560,6 +574,18 @@ function registerAuthIPC() {
   ipcMain.handle("auth:logout-all", async (event) => {
     if (!trusted(event)) return rejected();
     return await authOwner.logoutAll();
+  });
+  ipcMain.handle("vpn:status", async (event) => {
+    if (!trusted(event)) return rejected();
+    return vpnHandlers.status();
+  });
+  ipcMain.handle("vpn:connect", async (event, input) => {
+    if (!trusted(event)) return rejected();
+    return await vpnHandlers.connect(input);
+  });
+  ipcMain.handle("vpn:disconnect", async (event) => {
+    if (!trusted(event)) return rejected();
+    return await vpnHandlers.disconnect();
   });
   ipcMain.handle("reporting:get-settings", (event) => {
     if (!trusted(event)) return rejected();

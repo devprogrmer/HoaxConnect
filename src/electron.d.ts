@@ -194,6 +194,24 @@ declare global {
       | null;
   }
 
+  type HoaxVpnConnectionStatus =
+    | "idle"
+    | "connecting"
+    | "connected"
+    | "disconnecting"
+    | "error";
+
+  interface HoaxVpnConnectionState {
+    status: HoaxVpnConnectionStatus;
+    node: null | { id: string; endpoint: string; public_key: string };
+    leaseExpiresAt: string | null;
+    error: null | { code: string; message: string };
+  }
+
+  type HoaxVpnResponse =
+    | { ok: true; state: HoaxVpnConnectionState }
+    | { ok: false; error: { code: string; message: string } };
+
   interface HoaxDoctorProcess {
     id: string;
     pid: number;
@@ -554,6 +572,15 @@ declare global {
         Promise<
           HoaxSplitTunnelState
         >;
+    };
+
+    vpn: {
+      status(): Promise<HoaxVpnResponse>;
+      connect(location?: {
+        countryCode?: string;
+        region?: string;
+      }): Promise<HoaxVpnResponse>;
+      disconnect(): Promise<HoaxVpnResponse>;
     };
 
     doctor: {

@@ -96,6 +96,18 @@ contextBridge.exposeInMainWorld(
       },
     },
 
+    vpn: {
+      status() {
+        return ipcRenderer.invoke("vpn:status");
+      },
+      connect(location = {}) {
+        return ipcRenderer.invoke("vpn:connect", { location });
+      },
+      disconnect() {
+        return ipcRenderer.invoke("vpn:disconnect");
+      },
+    },
+
     doctor: {
       activity() {
         return ipcRenderer.invoke(
