@@ -81,7 +81,7 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
-      "differentialPackage": true,
+      "differentialPackage": "store-asar",
       "include": "build/tunnel-service.nsh"
     },
     "publish": [

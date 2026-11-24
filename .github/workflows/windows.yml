@@ -31,6 +31,7 @@ jobs:
       - run: npm run lint
       - run: npm run test:electron
       - run: npm run test:vpn-ui
+      - run: npm run test:update-artifacts
       - run: npm run build
 
       - name: Fetch pinned routing engine
@@ -80,3 +81,57 @@ jobs:
             release/HoaxConnect-*-Setup.exe
             release/HoaxConnect-*-Setup.exe.blockmap
             release/latest.yml
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_DB: hoaxconnect_ci_test
+          POSTGRES_USER: hoaxconnect_ci
+          POSTGRES_PASSWORD: hoaxconnect_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hoaxconnect_ci -d hoaxconnect_ci_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      DATABASE_SSL: "false"
+      HC_STAGE2C_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      HC_STAGE2D_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      HC_STAGE2F_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      HC_STAGE5_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      JWT_ACCESS_SECRET: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      JWT_ISSUER: https://api.hoaxconnect.test
+      JWT_AUDIENCE: hoaxconnect-desktop
+      REFRESH_TOKEN_PEPPER: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      REFRESH_RECOVERY_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+      ADMIN_SECRET_ENCRYPTION_KEY: CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=
+      EMAIL_VERIFICATION_REQUIRED: "false"
+      EMAIL_PROVIDER: none
+      PAYMENT_PROVIDER: none
+      LOG_LEVEL: silent
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm run migrate
+        working-directory: backend
+      - run: node --import tsx --test --test-concurrency=1 tests/*.test.ts
+        working-directory: backend

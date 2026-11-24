@@ -12,6 +12,11 @@ const verifier = resolve("scripts/verify-windows-update.mjs");
 const version = "0.3.10";
 const filename = `HoaxConnect-${version}-Setup.exe`;
 
+test("keeps application bytes stable for small differential updates", () => {
+  const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+  assert.equal(packageJson.build?.nsis?.differentialPackage, "store-asar");
+});
+
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "hc-update-check-"));
   const installer = Buffer.alloc(1_000_001, 42);
