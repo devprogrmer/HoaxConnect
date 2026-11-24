@@ -16,6 +16,7 @@ HC_API_PORT=31991
 HC_WG_PORT=51999
 HC_TMP=""
 HC_NFT_OWNED=0
+HC_CLEANUP_ENABLED=0
 
 die() { printf 'E2E_ERROR: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || { printf 'MISSING_PREREQUISITE=%s\n' "$1"; exit 20; }; }
@@ -35,6 +36,7 @@ preflight() {
   done
   ! ip netns list | grep -q "^${HC_NS}\b" || die "namespace ${HC_NS} already exists"
   ! ip link show "$HC_SERVER_IF" >/dev/null 2>&1 || die "interface ${HC_SERVER_IF} already exists"
+  ! ip link show "$HC_VETH_HOST" >/dev/null 2>&1 || die "interface ${HC_VETH_HOST} already exists"
   ! nft list table inet hoaxconnect >/dev/null 2>&1 || die "nft table inet hoaxconnect already exists"
   ! nft -a list chain ip filter DOCKER-USER 2>/dev/null | \
     grep -q "hoaxconnect-forward-${HC_SERVER_IF}-" || die "E2E forwarding rules already exist"
@@ -44,6 +46,7 @@ preflight() {
 }
 
 cleanup_runtime() {
+  [[ "$HC_CLEANUP_ENABLED" == "1" ]] || return 0
   set +e
   docker rm -f "$HC_AGENT" "$HC_API" "$HC_DB" >/dev/null 2>&1
   ip netns del "$HC_NS" >/dev/null 2>&1
@@ -62,7 +65,7 @@ cleanup_runtime() {
 cleanup() {
   local status=$?
   trap - EXIT
-  if test "$status" -ne 0; then
+  if test "$status" -ne 0 && test "$HC_CLEANUP_ENABLED" = 1; then
     for container in "$HC_AGENT" "$HC_API" "$HC_DB"; do
       if docker ps -aq --filter "name=^/${container}$" | grep -q .; then
         printf '===== %s LOG =====\n' "$container" >&2
@@ -95,6 +98,7 @@ nginx -T 2>/dev/null | sha256sum >"$HC_BEFORE_NGINX"
 HC_DISK_BEFORE="$(df --output=used / | tail -n1)"
 HC_EGRESS="$(ip -4 route show default | awk 'NR==1 {print $5}')"
 test -n "$HC_EGRESS" || die "default egress interface not found"
+HC_CLEANUP_ENABLED=1
 
 HC_DB_PASSWORD="$(openssl rand -hex 24)"
 HC_ENROLLMENT_TOKEN="$(openssl rand -base64 32 | tr -d '=+/\n' | cut -c1-43)"
@@ -233,6 +237,7 @@ if ip netns exec "$HC_NS" ping -c 1 -W 2 10.99.0.1 >/dev/null 2>&1; then
 fi
 
 cleanup_runtime
+HC_CLEANUP_ENABLED=0
 set -e
 docker ps --filter name=hoaxnet --format '{{.Names}}' | sort >"$HC_AFTER_NAMES"
 cmp "$HC_BEFORE_NAMES" "$HC_AFTER_NAMES"
