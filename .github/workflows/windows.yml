@@ -43,6 +43,26 @@ jobs:
           $env:HC_SING_BOX_PATH = (Resolve-Path './native-bin/routing/sing-box.exe').Path
           dotnet test ./native/HoaxConnect.Service.Tests/HoaxConnect.Service.Tests.csproj --configuration Release -p:NuGetAudit=false
 
-      - name: Publish Windows tunnel service
+      - name: Build Windows traffic helper
         shell: powershell
-        run: npm run build:tunnel-service
+        run: |
+          dotnet publish ./native/HoaxTraffic/HoaxTraffic.csproj -c Release -o ./native-bin/traffic-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item ./native-bin/traffic-build/HoaxTraffic.exe ./native-bin/HoaxTraffic.exe
+
+      - name: Build and verify Windows installer
+        shell: powershell
+        run: |
+          npm run dist:win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = node -p "require('./package.json').version"
+          node ./scripts/verify-windows-update.mjs ./release $version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HoaxConnect-Windows-x64
+          if-no-files-found: error
+          path: |
+            release/HoaxConnect-*-Setup.exe
+            release/HoaxConnect-*-Setup.exe.blockmap
+            release/latest.yml
