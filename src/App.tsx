@@ -64,15 +64,6 @@ type ServerInfo = {
   protocol: "WireGuard" | "AmneziaWG";
 };
 
-type ServerResult = {
-  ping: number;
-  jitter: number;
-  packetLoss: number;
-  testedAt: number;
-  method?: "ICMP" | "TCP";
-  tcpLatency?: number | null;
-};
-
 type Plan = {
   id: string;
   name: string;
@@ -91,68 +82,16 @@ type AppSettings = {
   protocol: "Automatic" | "WireGuard" | "AmneziaWG";
 };
 
-const SERVERS: ServerInfo[] = [
-  {
-    id: "de-01",
-    name: "Germany #01",
-    country: "Germany",
-    city: "Frankfurt",
-    flag: "🇩🇪",
-    countryCode: "de",
-    load: 31,
-    protocol: "WireGuard",
-  },
-  {
-    id: "de-02",
-    name: "Germany #02",
-    country: "Germany",
-    city: "Frankfurt",
-    flag: "🇩🇪",
-    countryCode: "de",
-    load: 48,
-    protocol: "AmneziaWG",
-  },
-  {
-    id: "nl-01",
-    name: "Netherlands #01",
-    country: "Netherlands",
-    city: "Amsterdam",
-    flag: "🇳🇱",
-    countryCode: "nl",
-    load: 22,
-    protocol: "WireGuard",
-  },
-  {
-    id: "tr-01",
-    name: "Türkiye #01",
-    country: "Türkiye",
-    city: "Istanbul",
-    flag: "🇹🇷",
-    countryCode: "tr",
-    load: 17,
-    protocol: "WireGuard",
-  },
-  {
-    id: "fi-01",
-    name: "Finland #01",
-    country: "Finland",
-    city: "Helsinki",
-    flag: "🇫🇮",
-    countryCode: "fi",
-    load: 12,
-    protocol: "AmneziaWG",
-  },
-  {
-    id: "fr-01",
-    name: "France #01",
-    country: "France",
-    city: "Paris",
-    flag: "🇫🇷",
-    countryCode: "fr",
-    load: 39,
-    protocol: "WireGuard",
-  },
-];
+const EMPTY_SERVER: ServerInfo = {
+  id: "",
+  name: "No live route",
+  country: "Unavailable",
+  city: "No online node",
+  flag: "",
+  countryCode: "",
+  load: 0,
+  protocol: "WireGuard",
+};
 
 const PLANS: Plan[] = [
   {
@@ -185,21 +124,6 @@ const PLANS: Plan[] = [
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function seed(value: string) {
-  return value.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
-}
-
-function makeResult(server: ServerInfo): ServerResult {
-  const value = seed(server.id);
-
-  return {
-    ping: 32 + (value % 54) + Math.floor(server.load / 8),
-    jitter: Number((1.2 + (value % 24) / 10).toFixed(1)),
-    packetLoss: value % 7 === 0 ? 0.4 : 0,
-    testedAt: Date.now(),
-  };
 }
 
 function Modal({
@@ -657,9 +581,8 @@ export default function App() {
     };
   }, [loggedIn]);
 
-  const [selectedServerId, setSelectedServerId] = useState(SERVERS[0].id);
-  const [results, setResults] = useState<Record<string, ServerResult>>({});
-  const [testingServer, setTestingServer] = useState<string | null>(null);
+  const [servers, setServers] = useState<ServerInfo[]>([]);
+  const [selectedServerId, setSelectedServerId] = useState("");
   const [testingAll, setTestingAll] = useState(false);
 
   const [download, setDownload] = useState(0);
@@ -693,11 +616,51 @@ export default function App() {
   });
 
   const selectedServer = useMemo(
-    () => SERVERS.find((server) => server.id === selectedServerId) ?? SERVERS[0],
-    [selectedServerId]
+    () => servers.find((server) => server.id === selectedServerId) ?? servers[0] ?? EMPTY_SERVER,
+    [selectedServerId, servers]
   );
 
-  const selectedResult = results[selectedServer.id];
+  async function refreshServers(showNotice = false) {
+    const vpn = window.hoax?.vpn;
+    if (!vpn) return;
+    setTestingAll(true);
+    try {
+      const response = await vpn.nodes();
+      if (!response.ok || !response.nodes) {
+        if (showNotice) notify(response.error?.message || "Live routes could not be loaded.");
+        return;
+      }
+      const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+      const live = response.nodes.map((node) => ({
+        id: node.id,
+        name: node.name,
+        country: displayNames.of(node.country_code) || node.country_code,
+        city: node.city || node.region,
+        flag: "",
+        countryCode: node.country_code.toLowerCase(),
+        load: node.load_percent,
+        protocol: "WireGuard" as const,
+      }));
+      setServers(live);
+      setSelectedServerId((current) =>
+        live.some((server) => server.id === current) ? current : (live[0]?.id || ""),
+      );
+      if (showNotice) notify(`${live.length} live routes loaded.`);
+    } finally {
+      setTestingAll(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!loggedIn) {
+      setServers([]);
+      setSelectedServerId("");
+      return;
+    }
+    void refreshServers();
+    const timer = window.setInterval(() => void refreshServers(), 15000);
+    return () => window.clearInterval(timer);
+  }, [loggedIn]);
 
   function notify(message: string) {
     setToast(message);
@@ -763,74 +726,19 @@ export default function App() {
     };
   }, [loggedIn, page]);
 
-  async function testServer(server: ServerInfo) {
-    setTestingServer(server.id);
-
-    await sleep(650);
-
-    const result = makeResult(server);
-
-    setResults((old) => ({
-      ...old,
-      [server.id]: result,
-    }));
-
-    setTestingServer(null);
-
-    return result;
-  }
-
   async function testAllServers() {
-    setTestingAll(true);
-
-    const next: Record<string, ServerResult> = {};
-
-    for (const server of SERVERS) {
-      setTestingServer(server.id);
-      await sleep(280);
-      next[server.id] = makeResult(server);
-    }
-
-    setResults(next);
-    setTestingServer(null);
-    setTestingAll(false);
-    notify("All server routes tested.");
+    await refreshServers(true);
   }
 
   async function autoSelect() {
-    setTestingAll(true);
-
-    const next: Record<string, ServerResult> = {};
-
-    for (const server of SERVERS) {
-      setTestingServer(server.id);
-      await sleep(240);
-      next[server.id] = makeResult(server);
+    await refreshServers();
+    const best = [...servers].sort((a, b) => a.load - b.load)[0];
+    if (!best) {
+      notify("No live VPN route is currently available.");
+      return;
     }
-
-    setResults(next);
-
-    const best = [...SERVERS].sort((a, b) => {
-      const scoreA =
-        next[a.id].ping +
-        next[a.id].jitter * 3 +
-        next[a.id].packetLoss * 20 +
-        a.load * 0.15;
-
-      const scoreB =
-        next[b.id].ping +
-        next[b.id].jitter * 3 +
-        next[b.id].packetLoss * 20 +
-        b.load * 0.15;
-
-      return scoreA - scoreB;
-    })[0];
-
     setSelectedServerId(best.id);
-    setTestingServer(null);
-    setTestingAll(false);
-
-    notify(`Best route selected: ${best.name}`);
+    notify(`Lowest-load live route selected: ${best.name}`);
   }
 
   async function toggleConnection() {
@@ -861,6 +769,11 @@ export default function App() {
     const vpn = window.hoax?.vpn;
     if (!vpn) {
       notify("The HoaxConnect tunnel service is unavailable.");
+      return;
+    }
+
+    if (!selectedServer.id) {
+      notify("No live VPN route is currently available.");
       return;
     }
 
@@ -1270,34 +1183,28 @@ export default function App() {
               <div>
                 <span>
                   <Radio size={15} />
-                  PING
+                  ROUTE
                 </span>
 
-                <strong>
-                  {selectedResult?.ping ?? "--"} <small>ms</small>
-                </strong>
+                <strong>{selectedServer.id ? "LIVE" : "--"}</strong>
               </div>
 
               <div>
                 <span>
                   <Activity size={15} />
-                  JITTER
+                  LOAD
                 </span>
 
-                <strong>
-                  {selectedResult?.jitter ?? "--"} <small>ms</small>
-                </strong>
+                <strong>{selectedServer.id ? selectedServer.load : "--"} <small>%</small></strong>
               </div>
 
               <div>
                 <span>
                   <Wifi size={15} />
-                  PACKET LOSS
+                  TRANSPORT
                 </span>
 
-                <strong>
-                  {selectedResult?.packetLoss ?? "--"} <small>%</small>
-                </strong>
+                <strong>{selectedServer.protocol}</strong>
               </div>
             </div>
           </article>
@@ -1320,9 +1227,7 @@ export default function App() {
             </div>
 
             <div className="serverTable">
-              {SERVERS.slice(0, 4).map((server) => {
-                const result = results[server.id];
-
+              {servers.slice(0, 4).map((server) => {
                 return (
                   <button
                     key={server.id}
@@ -1354,14 +1259,8 @@ export default function App() {
                     </div>
 
                     <div className="serverMeta pingMeta">
-                      <span>PING</span>
-                      <strong>
-                        {testingServer === server.id
-                          ? "..."
-                          : result
-                            ? `${result.ping} ms`
-                            : "--"}
-                      </strong>
+                      <span>STATUS</span>
+                      <strong>LIVE</strong>
                     </div>
 
                     <ChevronRight size={18} />
@@ -1428,8 +1327,8 @@ export default function App() {
 
         <div className="pageToolbar">
           <div>
-            <strong>{SERVERS.length} available routes</strong>
-            <span>UI Test Mode — real node API comes next.</span>
+            <strong>{servers.length} live routes</strong>
+            <span>Only online Backend nodes with free capacity are shown.</span>
           </div>
 
           <button
@@ -1441,14 +1340,12 @@ export default function App() {
               size={16}
               className={testingAll ? "spin" : ""}
             />
-            TEST ALL
+            REFRESH
           </button>
         </div>
 
         <div className="fullServerList">
-          {SERVERS.map((server) => {
-            const result = results[server.id];
-
+          {servers.map((server) => {
             return (
               <article
                 className={`fullServerCard ${
@@ -1486,22 +1383,9 @@ export default function App() {
                 </div>
 
                 <div className="serverData">
-                  <span>PING</span>
-                  <strong>
-                    {testingServer === server.id
-                      ? "Testing..."
-                      : result
-                        ? `${result.ping} ms`
-                        : "--"}
-                  </strong>
+                  <span>STATUS</span>
+                  <strong>LIVE</strong>
                 </div>
-
-                <button
-                  className="testRouteButton"
-                  onClick={() => testServer(server)}
-                >
-                  TEST
-                </button>
 
                 <button
                   className="routeSelectButton"

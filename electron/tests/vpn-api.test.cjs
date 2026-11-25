@@ -86,3 +86,35 @@ test("VPN API disconnect uses the authenticated Backend route", async () => {
   }]);
 });
 
+test("VPN API lists validated live Backend nodes", async () => {
+  const requests = [];
+  const api = createVpnApi({
+    requestAuthenticated: async (pathname, payload) => {
+      requests.push({ pathname, payload });
+      return { nodes: [{
+        id: "8bc490e1-e832-4cf4-9913-37bbcdf63b2c",
+        name: "Germany #01",
+        country_code: "DE",
+        region: "fra",
+        city: "Frankfurt",
+        capacity_peers: 100,
+        current_peers: 25,
+        load_percent: 25,
+      }] };
+    },
+  });
+
+  assert.equal((await api.nodes())[0].load_percent, 25);
+  assert.deepEqual(requests, [{
+    pathname: "/api/v1/vpn/nodes",
+    payload: {},
+  }]);
+});
+
+test("VPN API rejects malformed Backend node lists", async () => {
+  const api = createVpnApi({
+    requestAuthenticated: async () => ({ nodes: [{ id: "node", load_percent: 150 }] }),
+  });
+  await assert.rejects(api.nodes(), /invalid VPN node list/);
+});
+

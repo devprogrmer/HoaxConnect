@@ -36,12 +36,39 @@ function validateAuthorization(value) {
   return value;
 }
 
+function validateNodes(value) {
+  if (!value || typeof value !== "object" || !Array.isArray(value.nodes)) {
+    throw new Error("The Backend returned an invalid VPN node list.");
+  }
+  for (const node of value.nodes) {
+    if (
+      !node || typeof node !== "object" ||
+      !requiredString(node.id) || !requiredString(node.name) ||
+      !/^[A-Z]{2}$/.test(node.country_code || "") ||
+      !requiredString(node.region) ||
+      (node.city !== null && node.city !== undefined && typeof node.city !== "string") ||
+      !Number.isInteger(node.capacity_peers) || node.capacity_peers < 0 ||
+      !Number.isInteger(node.current_peers) || node.current_peers < 0 ||
+      !Number.isInteger(node.load_percent) || node.load_percent < 0 || node.load_percent > 100
+    ) {
+      throw new Error("The Backend returned an invalid VPN node list.");
+    }
+  }
+  return value.nodes;
+}
+
 function createVpnApi({ requestAuthenticated }) {
   if (typeof requestAuthenticated !== "function") {
     throw new TypeError("requestAuthenticated is required");
   }
 
   return Object.freeze({
+    async nodes() {
+      return validateNodes(
+        await requestAuthenticated("/api/v1/vpn/nodes", {}),
+      );
+    },
+
     async authorize(input) {
       if (!WIREGUARD_KEY.test(input?.clientPublicKey || "")) {
         throw new Error("A valid WireGuard public key is required.");
@@ -85,5 +112,6 @@ function createVpnApi({ requestAuthenticated }) {
 module.exports = {
   createVpnApi,
   validateAuthorization,
+  validateNodes,
 };
 

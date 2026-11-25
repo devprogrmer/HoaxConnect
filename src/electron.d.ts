@@ -575,6 +575,20 @@ declare global {
     };
 
     vpn: {
+      nodes(): Promise<{
+        ok: boolean;
+        nodes?: Array<{
+          id: string;
+          name: string;
+          country_code: string;
+          region: string;
+          city: string | null;
+          capacity_peers: number;
+          current_peers: number;
+          load_percent: number;
+        }>;
+        error?: { code: string; message: string };
+      }>;
       status(): Promise<HoaxVpnResponse>;
       connect(location?: {
         countryCode?: string;

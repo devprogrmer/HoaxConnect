@@ -579,6 +579,11 @@ function registerAuthIPC() {
     if (!trusted(event)) return rejected();
     return vpnHandlers.status();
   });
+  ipcMain.handle("vpn:nodes", async (event) => {
+    if (!trusted(event)) return rejected();
+    try { return { ok: true, nodes: await authOwner.listVpnNodes() }; }
+    catch (error) { return { ok: false, error: { code: "VPN_NODES_FAILED", message: error?.message || "VPN nodes could not be loaded." } }; }
+  });
   ipcMain.handle("vpn:connect", async (event, input) => {
     if (!trusted(event)) return rejected();
     return await vpnHandlers.connect(input);

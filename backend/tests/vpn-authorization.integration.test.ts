@@ -106,6 +106,29 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
     );
     ids.node = node.rows[0]!.id;
 
+    await t.test("lists only live VPN nodes for the authenticated desktop", async () => {
+      const list = () => app.inject({
+        method: "POST", url: "/api/v1/vpn/nodes",
+        headers: { authorization: `Bearer ${token}` }, payload: {},
+      });
+      const available = await list();
+      assert.equal(available.statusCode, 200, available.body);
+      assert.deepEqual(available.json().data.nodes, [{
+        id: ids.node,
+        name: `vpn-node-${suffix}`,
+        country_code: "DE",
+        region: "fra",
+        city: null,
+        capacity_peers: 100,
+        current_peers: 0,
+        load_percent: 0,
+      }]);
+
+      await pool.query("UPDATE vpn_nodes SET last_seen_at = now() - interval '2 minutes' WHERE id = $1", [ids.node]);
+      assert.deepEqual((await list()).json().data.nodes, []);
+      await pool.query("UPDATE vpn_nodes SET last_seen_at = now() WHERE id = $1", [ids.node]);
+    });
+
     await t.test("rejects invalid keys and missing, expired, or exhausted entitlement", async () => {
       assert.equal((await authorize({ client_public_key: "bad", country_code: "DE" })).statusCode, 400);
       await pool.query("UPDATE subscriptions SET status = 'cancelled' WHERE id = $1", [subscriptionId]);

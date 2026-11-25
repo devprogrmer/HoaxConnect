@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld(
     },
 
     vpn: {
+      nodes() {
+        return ipcRenderer.invoke("vpn:nodes");
+      },
       status() {
         return ipcRenderer.invoke("vpn:status");
       },

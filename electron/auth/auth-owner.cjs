@@ -699,6 +699,9 @@ function createElectronAuthOwner({
     authorizeVpn(input) {
       return serial(() => vpnApi.authorize(input));
     },
+    listVpnNodes() {
+      return serial(() => vpnApi.nodes());
+    },
     disconnectVpn() {
       return serial(() => vpnApi.disconnect());
     },

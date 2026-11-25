@@ -14,6 +14,25 @@ const authorizeSchema = z.object({
 }).strict();
 
 export async function registerVpnRoutes(app: FastifyInstance) {
+  app.post("/api/v1/vpn/nodes", async (request) => {
+    await authenticate(request);
+    z.object({}).strict().parse(request.body ?? {});
+    const result = await pool.query(
+      `SELECT id, name, country_code, region, city,
+              capacity_peers, current_peers,
+              CASE WHEN capacity_peers > 0
+                THEN least(100, round(current_peers * 100.0 / capacity_peers)::int)
+                ELSE 0
+              END AS load_percent
+       FROM vpn_nodes
+       WHERE enabled = true AND status = 'online'
+         AND last_seen_at > now() - interval '90 seconds'
+         AND (capacity_peers = 0 OR current_peers < capacity_peers)
+       ORDER BY load_percent, country_code, region, name`,
+    );
+    return { data: { nodes: result.rows } };
+  });
+
   app.post("/api/v1/vpn/authorize", async (request) => {
     const auth = await authenticate(request);
     const input = authorizeSchema.parse(request.body);
