@@ -1,6 +1,13 @@
 name: Windows update delta
 
 on:
+  workflow_run:
+    workflows:
+      - Windows
+    types:
+      - completed
+    branches:
+      - codex/**
   push:
     paths:
       - .github/workflows/windows-delta.yml
@@ -10,7 +17,7 @@ on:
       candidate_run:
         description: Windows installer workflow run ID
         required: true
-        default: "45492193248"
+        default: "45558249447"
 
 permissions:
   actions: read
@@ -18,6 +25,9 @@ permissions:
 
 jobs:
   measure:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +37,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.candidate_run || '45492193248' }}
+          run-id: ${{ inputs.candidate_run || github.event.workflow_run.id || '45558249447' }}
           name: HoaxConnect-Windows-x64
           path: candidate
       - name: Compare with the 0.4.0 baseline
