@@ -38,6 +38,7 @@ backups/
 *.tmp
 .tmp/
 tmp/
+.superpowers/
 
 # Runtime configuration and secrets
 .env

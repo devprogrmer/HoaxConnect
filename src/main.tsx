@@ -16,6 +16,7 @@ import {
   UpdateDock,
   UpdatePrompt,
 } from "./Updater";
+import { LocaleProvider } from "./i18n.tsx";
 
 function showFatalError(
   title: string,
@@ -94,12 +95,14 @@ try {
 
   createRoot(root).render(
     <StrictMode>
-      <App />
-      <DiagnosticsConsentGate />
+      <LocaleProvider>
+        <App />
+        <DiagnosticsConsentGate />
 
-      <UpdatePrompt />
+        <UpdatePrompt />
 
-      <UpdateDock />
+        <UpdateDock />
+      </LocaleProvider>
     </StrictMode>
   );
 } catch (error) {
