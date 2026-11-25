@@ -73,3 +73,27 @@ export function useI18n(): I18nValue {
   if (!value) throw new Error("useI18n must be used inside LocaleProvider");
   return value;
 }
+
+export function LanguageSwitcher({ className = "" }: { className?: string }) {
+  const { locale, setLocale, t } = useI18n();
+  return (
+    <div className={`languageSwitcher ${className}`.trim()} aria-label={t("language.label")}>
+      <button
+        type="button"
+        className={locale === "en" ? "languageActive" : ""}
+        aria-pressed={locale === "en"}
+        onClick={() => setLocale("en")}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        className={locale === "fa" ? "languageActive" : ""}
+        aria-pressed={locale === "fa"}
+        onClick={() => setLocale("fa")}
+      >
+        فارسی
+      </button>
+    </div>
+  );
+}

@@ -34,6 +34,7 @@ import "./App.css";
 import NetworkDoctor from "./NetworkDoctor";
 import SplitTunnel from "./SplitTunnel";
 import DeviceReportingSettings from "./DeviceReportingSettings";
+import { LanguageSwitcher, useI18n } from "./i18n";
 import {
   nativeAvailable,
   nativeDiagnostic,
@@ -206,6 +207,7 @@ function Login({
   onModal: (modal: ModalType) => void;
   initialError: string;
 }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
@@ -311,25 +313,26 @@ function Login({
 
       <section className="loginPanel">
         <form className="loginCard" onSubmit={submit}>
+          <LanguageSwitcher />
           <div className="loginHeader">
             <span className="eyebrow">
-              {mode === "login" ? "WELCOME BACK" : "NEW ACCOUNT"}
+              {mode === "login" ? t("auth.welcomeBack") : t("auth.newAccount")}
             </span>
             <h2>
               {mode === "login"
-                ? "Sign in to HoaxConnect"
-                : "Create your account"}
+                ? t("auth.signInTitle")
+                : t("auth.createTitle")}
             </h2>
             <p>
               {mode === "login"
-                ? "Sign in securely with your account and this device."
-                : "Your phone number is not verified until phone verification is available."}
+                ? t("auth.signInDescription")
+                : t("auth.createDescription")}
             </p>
           </div>
 
           {mode === "login" ? (
             <label className="inputGroup">
-              <span>USERNAME OR EMAIL</span>
+              <span>{t("auth.identifier")}</span>
               <input
                 autoComplete="username"
                 value={identifier}
@@ -342,7 +345,7 @@ function Login({
           ) : (
             <>
               <label className="inputGroup">
-                <span>EMAIL</span>
+                <span>{t("auth.email")}</span>
                 <input
                   type="email"
                   autoComplete="email"
@@ -353,7 +356,7 @@ function Login({
                 />
               </label>
               <label className="inputGroup">
-                <span>PHONE NUMBER</span>
+                <span>{t("auth.phone")}</span>
                 <input
                   type="tel"
                   autoComplete="tel"
@@ -366,7 +369,7 @@ function Login({
                 />
               </label>
               <label className="inputGroup">
-                <span>USERNAME</span>
+                <span>{t("auth.username")}</span>
                 <input
                   autoComplete="username"
                   value={username}
@@ -381,7 +384,7 @@ function Login({
           )}
 
           <label className="inputGroup">
-            <span>PASSWORD</span>
+            <span>{t("auth.password")}</span>
             <input
               type="password"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
@@ -408,22 +411,22 @@ function Login({
                 onClick={() => onModal("forgot")}
                 disabled={loading}
               >
-                Forgot password?
+                {t("auth.forgotPassword")}
               </button>
             </div>
           )}
 
           <button className="loginButton" disabled={loading}>
             {loading
-              ? mode === "login" ? "SIGNING IN..." : "CREATING ACCOUNT..."
-              : mode === "login" ? "SIGN IN" : "CREATE ACCOUNT"}
+              ? mode === "login" ? t("auth.signingIn") : t("auth.creatingAccount")
+              : mode === "login" ? t("auth.signIn") : t("auth.createAccount")}
             {!loading && <ChevronRight size={19} />}
           </button>
 
           <p className="loginFooter">
             {mode === "login"
-              ? "Don't have an account? "
-              : "Already have an account? "}
+              ? `${t("auth.noAccount")} `
+              : `${t("auth.hasAccount")} `}
             <button
               type="button"
               disabled={loading}
@@ -431,7 +434,7 @@ function Login({
                 switchMode(mode === "login" ? "register" : "login")
               }
             >
-              {mode === "login" ? "Create one" : "Sign in"}
+              {mode === "login" ? t("auth.createOne") : t("auth.signIn")}
             </button>
           </p>
         </form>
@@ -441,6 +444,7 @@ function Login({
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [loggedIn, setLoggedIn] = useState(false);
   const [authNotice, setAuthNotice] = useState("");
   const [authChecking, setAuthChecking] = useState(
@@ -902,12 +906,12 @@ export default function App() {
 
   function Sidebar() {
     const nav = [
-      ["dashboard", "Dashboard", <Gauge size={19} />],
-      ["servers", "Servers", <Server size={19} />],
-      ["game-test", "Game Test", <Gamepad2 size={19} />],
-      ["network", "Network Test", <Activity size={19} />],
-      ["network-doctor", "Network Doctor", <Activity size={19} />],
-      ["split-tunnel", "Games & Apps", <Network size={19} />],
+      ["dashboard", t("nav.home"), <Gauge size={19} />],
+      ["servers", t("nav.servers"), <Server size={19} />],
+      ["game-test", t("nav.gameTest"), <Gamepad2 size={19} />],
+      ["network", t("nav.networkTest"), <Activity size={19} />],
+      ["network-doctor", t("nav.networkDoctor"), <Activity size={19} />],
+      ["split-tunnel", t("nav.gamesApps"), <Network size={19} />],
     ] as const;
 
     return (
@@ -946,7 +950,7 @@ export default function App() {
             onClick={() => setPage("subscription")}
           >
             <ShoppingBag size={19} />
-            Subscription
+            {t("nav.subscription")}
           </button>
 
           <button
@@ -954,7 +958,7 @@ export default function App() {
             onClick={() => setPage("settings")}
           >
             <Settings size={19} />
-            Settings
+            {t("nav.settings")}
           </button>
         </nav>
 
@@ -1983,7 +1987,14 @@ export default function App() {
 
     return (
       <>
-        <PageHeader eyebrow="PREFERENCES" title="Settings" />
+        <PageHeader eyebrow={t("settings.preferences")} title={t("nav.settings")} />
+        <article className="genericCard languageSettingsCard">
+          <div>
+            <strong>{t("settings.languageTitle")}</strong>
+            <span>{t("settings.languageDescription")}</span>
+          </div>
+          <LanguageSwitcher />
+        </article>
         <DeviceReportingSettings />
 
         <div className="settingsGrid">
@@ -2081,7 +2092,7 @@ export default function App() {
               onClick={() => notify("Settings saved in UI Test Mode.")}
             >
               <Check size={17} />
-              SAVE SETTINGS
+              {t("settings.save")}
             </button>
           </article>
         </div>

@@ -14,6 +14,7 @@ import {
 
 import "./SplitTunnel.css";
 import { appCatalog, gameArtwork, gameCatalog } from "./game-catalog";
+import { useI18n } from "./i18n";
 
 const DEFAULT_STATE:
   HoaxSplitTunnelState = {
@@ -26,6 +27,7 @@ export default function SplitTunnel({ connection, onConnect }: {
   connection: string;
   onConnect: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [
     apps,
     setApps,
@@ -308,7 +310,7 @@ export default function SplitTunnel({ connection, onConnect }: {
       <section className="splitHero">
         <div>
           <span className="eyebrow">
-            APPLICATION ROUTING
+            {t("games.applicationRouting")}
           </span>
 
           <h2>
@@ -322,7 +324,7 @@ export default function SplitTunnel({ connection, onConnect }: {
 
         <div className="splitSummary">
           <span>
-            SELECTED APPS
+            {t("games.selectedApps")}
           </span>
 
           <strong>
@@ -339,7 +341,7 @@ export default function SplitTunnel({ connection, onConnect }: {
         <div className="splitAppsHeader">
           <div>
             <span className="splitSectionTitle">
-              WINDOWS APPLICATIONS
+              {t("games.windowsApps")}
             </span>
 
             <strong>

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useI18n } from "./i18n";
 
 export default function DeviceReportingSettings() {
+  const { t } = useI18n();
   const [permissions, setPermissions] = useState<HoaxReportingPermissions | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -38,7 +40,7 @@ export default function DeviceReportingSettings() {
     ["applications", "Share open application names", "Send names of applications with visible windows. Window titles, file paths and browsing history are excluded."],
   ];
   return <section className="device-reporting-settings">
-    <h2>Device reporting</h2>
+    <h2>{t("reporting.title")}</h2>
     <p>Your signed-in app reports its presence and connection IP. Additional sharing is optional. Reports expire after 24 hours.</p>
     <fieldset disabled={!permissions || busy}>
       {options.map(([key, label, description]) => <label className="settingRow" key={key}>

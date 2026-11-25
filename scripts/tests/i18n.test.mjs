@@ -16,6 +16,10 @@ const faSource = await readFile(
   new URL("../../src/locales/fa.ts", import.meta.url),
   "utf8",
 );
+const rendererSources = await Promise.all(
+  ["App.tsx", "SplitTunnel.tsx", "NetworkDoctor.tsx", "DeviceReportingSettings.tsx"]
+    .map((file) => readFile(new URL(`../../src/${file}`, import.meta.url), "utf8")),
+);
 
 function translationKeys(source) {
   return [...source.matchAll(/^\s{2}"([^"]+)":/gm)]
@@ -47,4 +51,24 @@ test("translation parameters interpolate without evaluating markup", () => {
     }),
     "Hello, <Amir>. Version 4",
   );
+});
+
+test("all renderer screens consume the locale provider", () => {
+  for (const source of rendererSources) {
+    assert.match(source, /useI18n/);
+  }
+});
+
+test("authentication and settings expose the shared language switcher", () => {
+  const app = rendererSources[0];
+  assert.match(app, /<LanguageSwitcher/);
+  assert.ok((app.match(/<LanguageSwitcher/g) ?? []).length >= 2);
+});
+
+test("primary navigation is translated instead of hardcoded", () => {
+  const app = rendererSources[0];
+  assert.match(app, /t\("nav\.home"\)/);
+  assert.match(app, /t\("nav\.gamesApps"\)/);
+  assert.match(app, /t\("nav\.networkDoctor"\)/);
+  assert.match(app, /t\("nav\.settings"\)/);
 });
