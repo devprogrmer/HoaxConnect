@@ -54,7 +54,6 @@ declare global {
     packets: number;
     source: string;
 
-    launcherId?: string;
     score: number;
   }
 
@@ -164,6 +163,8 @@ declare global {
     path: string;
 
     source: string;
+
+    launcherId?: string;
 
     running: boolean;
 
