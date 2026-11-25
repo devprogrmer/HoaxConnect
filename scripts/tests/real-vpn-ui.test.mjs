@@ -25,3 +25,9 @@ test("dashboard opens app selection and the library requires a saved selection t
   assert.match(library, /\.save\(\{ \.\.\.state, mode: "selected-only" \}\)/);
   assert.match(library, /connection !== "connected" && state\.selectedApps\.length === 0/);
 });
+
+test("Steam-discovered games use their launcher artwork without controlling routing", () => {
+  assert.match(library, /app\.source === "steam"/);
+  assert.match(library, /gameArtwork\(Number\(app\.launcherId\)\)/);
+  assert.match(library, /toggleApp\(app\)/);
+});

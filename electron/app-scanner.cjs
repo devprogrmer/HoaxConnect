@@ -2,6 +2,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const {
+  executableCandidates,
   scanEpicManifests,
   scanSteamLibraries,
 } = require("./launcher-scanner.cjs");
@@ -144,6 +145,15 @@ function mergeDiscoveredApps(genericApps, launcherApps) {
     .slice(0, 2000);
 }
 
+function executablePathsForInstalledItem(item) {
+  const explicit = normalizeExePath(item?.executable);
+  if (explicit) return [explicit];
+  if (!item?.installLocation || typeof item.installLocation !== "string") return [];
+  return executableCandidates(item.installLocation, 0)
+    .map((candidate) => normalizeExePath(candidate))
+    .filter(Boolean);
+}
+
 async function scanWindowsApps() {
   if (process.platform !== "win32") {
     return [];
@@ -248,13 +258,16 @@ $running = @(
 
   const result = new Map();
 
-  for (const item of array(raw.installed)) {
+  const expandedInstalled = array(raw.installed).flatMap((item) =>
+    executablePathsForInstalledItem(item).map((executable) => ({
+      ...item,
+      executable,
+    }))
+  );
+
+  for (const item of expandedInstalled) {
     let exePath =
       normalizeExePath(item.executable);
-
-    if (!exePath && item.installLocation) {
-      continue;
-    }
 
     if (!exePath) {
       continue;
@@ -407,5 +420,6 @@ function appFromManualPath(exePath) {
 module.exports = {
   scanWindowsApps,
   appFromManualPath,
+  executablePathsForInstalledItem,
   mergeDiscoveredApps,
 };

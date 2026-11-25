@@ -8,7 +8,10 @@ const {
   scanEpicManifests,
   scanSteamLibraries,
 } = require("../launcher-scanner.cjs");
-const { mergeDiscoveredApps } = require("../app-scanner.cjs");
+const {
+  executablePathsForInstalledItem,
+  mergeDiscoveredApps,
+} = require("../app-scanner.cjs");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hc-launchers-"));
 after(() => fs.rmSync(root, { force: true, recursive: true }));
@@ -128,4 +131,19 @@ test("launcher metadata wins while exact executable paths deduplicate", () => {
   assert.equal(merged[0].source, "steam");
   assert.equal(merged[0].launcherId, "99");
   assert.equal(merged[0].running, true);
+});
+
+test("registry entries with only InstallLocation discover top-level executables", () => {
+  const installLocation = path.join(root, "RegistryOnly");
+  write(path.join(installLocation, "ActualGame.exe"));
+  write(path.join(installLocation, "uninstall.exe"));
+  write(path.join(installLocation, "nested", "IgnoredAtThisStage.exe"));
+
+  assert.deepEqual(
+    executablePathsForInstalledItem({
+      executable: null,
+      installLocation,
+    }),
+    [path.join(installLocation, "ActualGame.exe")],
+  );
 });

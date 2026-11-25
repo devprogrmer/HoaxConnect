@@ -450,6 +450,10 @@ export default function SplitTunnel({ connection, onConnect }: {
                   selectedIDs.has(
                     app.id
                   );
+                const launcherArtwork =
+                  app.source === "steam" && app.launcherId && /^\d+$/.test(app.launcherId)
+                    ? gameArtwork(Number(app.launcherId))
+                    : null;
 
                 return (
                   <button
@@ -465,10 +469,12 @@ export default function SplitTunnel({ connection, onConnect }: {
                     aria-pressed={selected}
                   >
                     <div className="splitAppIcon">
-                      {app.icon ? (
+                      {app.icon || launcherArtwork ? (
                         <img
-                          src={app.icon}
+                          src={app.icon || launcherArtwork || undefined}
                           alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(event) => { event.currentTarget.hidden = true; }}
                         />
                       ) : (
                         <AppWindow
