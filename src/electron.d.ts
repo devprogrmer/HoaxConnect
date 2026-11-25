@@ -53,6 +53,8 @@ declare global {
     protocol: "TCP" | "UDP";
     packets: number;
     source: string;
+
+    launcherId?: string;
     score: number;
   }
 
