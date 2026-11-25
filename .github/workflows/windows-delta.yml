@@ -21,7 +21,7 @@ on:
       candidate_run:
         description: Windows installer workflow run ID
         required: true
-        default: "45558249447"
+        default: "45575865146"
 
 permissions:
   actions: read
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.candidate_run || github.event.workflow_run.id || '45558249447' }}
+          run-id: ${{ inputs.candidate_run || github.event.workflow_run.id || '45575865146' }}
           name: HoaxConnect-Windows-x64
           path: candidate
       - name: Enforce the differential update limit
