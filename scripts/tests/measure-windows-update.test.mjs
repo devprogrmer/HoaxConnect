@@ -4,9 +4,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
-const script = new URL("../measure-windows-delta.mjs", import.meta.url);
+const script = fileURLToPath(new URL("../measure-windows-delta.mjs", import.meta.url));
 
 function blockmap(path, checksums, sizes) {
   writeFileSync(
@@ -29,7 +30,7 @@ test("accepts an update delta within the release limit", () => {
 
   const output = execFileSync(
     process.execPath,
-    [script.pathname, previous, next, "200"],
+    [script, previous, next, "200"],
     { encoding: "utf8" },
   );
 
@@ -48,7 +49,7 @@ test("blocks an update delta above the release limit", () => {
 
   const result = spawnSync(
     process.execPath,
-    [script.pathname, previous, next, "200"],
+    [script, previous, next, "200"],
     { encoding: "utf8" },
   );
 
