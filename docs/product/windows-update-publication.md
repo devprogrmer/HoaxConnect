@@ -39,3 +39,13 @@ Neither installer is Authenticode-signed. HTTPS in 0.3.10 protects later
 metadata transport but does not retroactively secure the old client or replace
 artifact signing. Shipping the 0.3.10 update is a compatibility bridge, not
 completion of the production updater supply-chain requirements.
+
+## 0.4.0 differential-package bridge
+
+The 0.4.0 installer predates the stable `store-asar` differential layout. Its
+existing updater cannot learn a new patch protocol before installing a newer
+client, and measured blockmaps show that changing layouts requires nearly a
+full installer download. Treat the first update from 0.4.0 as a one-time
+bridge. Every later Windows build is compared with the first `store-asar`
+artifact in GitHub Actions and is rejected when estimated changed bytes exceed
+25 MB.

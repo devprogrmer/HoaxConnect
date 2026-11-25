@@ -9,6 +9,7 @@ on:
   pull_request:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -150,14 +151,19 @@ jobs:
         with:
           name: HoaxConnect-Windows-x64
           path: candidate
-      - name: Enforce the 0.4.0 differential update limit
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: "45573891815"
+          name: HoaxConnect-Windows-x64
+          path: baseline
+      - name: Enforce the post-bridge differential update limit
         run: |
+          baseline_blockmap=(baseline/HoaxConnect-*-Setup.exe.blockmap)
           candidate_blockmap=(candidate/HoaxConnect-*-Setup.exe.blockmap)
+          test "${#baseline_blockmap[@]}" -eq 1
           test "${#candidate_blockmap[@]}" -eq 1
-          curl --fail --silent --show-error --max-time 30 \
-            https://hoaxnet.ir/updates/HoaxConnect-0.4.0-Setup.exe.blockmap \
-            --output baseline.blockmap
           node scripts/measure-windows-delta.mjs \
-            baseline.blockmap \
+            "${baseline_blockmap[0]}" \
             "${candidate_blockmap[0]}" \
             25000000
