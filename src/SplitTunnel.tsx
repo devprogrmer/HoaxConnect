@@ -148,8 +148,8 @@ export default function SplitTunnel({ connection, onConnect }: {
     }, [apps, search]);
 
   const catalogSections = [
-    { title: "Game catalog", entries: gameCatalog },
-    { title: "App catalog", entries: appCatalog },
+    { title: t("games.gameCatalog"), entries: gameCatalog },
+    { title: t("games.appCatalog"), entries: appCatalog },
   ].map(({ title, entries }) => ({
     title,
     entries: entries.filter(({ name, executables }) => {
@@ -267,7 +267,7 @@ export default function SplitTunnel({ connection, onConnect }: {
       setState(result);
 
       setSavedMessage(
-        "App selection saved."
+        t("games.saved")
       );
 
       window.setTimeout(
@@ -293,13 +293,11 @@ export default function SplitTunnel({ connection, onConnect }: {
         <AppWindow size={44} />
 
         <strong>
-          Desktop app required
+          {t("games.desktopRequired")}
         </strong>
 
         <span>
-          Installed application scanning
-          is only available inside
-          HoaxConnect for Windows.
+          {t("games.desktopRequiredDescription")}
         </span>
       </div>
     );
@@ -314,11 +312,11 @@ export default function SplitTunnel({ connection, onConnect }: {
           </span>
 
           <h2>
-            Your apps
+            {t("games.yourApps")}
           </h2>
 
           <p>
-            Tick the games or apps you want to connect, then choose Connect selected.
+            {t("games.description")}
           </p>
         </div>
 
@@ -345,7 +343,7 @@ export default function SplitTunnel({ connection, onConnect }: {
             </span>
 
             <strong>
-              Find games and apps
+              {t("games.find")}
             </strong>
           </div>
 
@@ -363,7 +361,7 @@ export default function SplitTunnel({ connection, onConnect }: {
                 }
               />
 
-              REFRESH
+              {t("games.refresh")}
             </button>
 
             <button
@@ -371,7 +369,7 @@ export default function SplitTunnel({ connection, onConnect }: {
             >
               <FolderOpen size={15} />
 
-              ADD EXE
+              {t("games.addExe")}
             </button>
           </div>
         </div>
@@ -386,7 +384,7 @@ export default function SplitTunnel({ connection, onConnect }: {
                 event.target.value
               )
             }
-            placeholder="Search games and apps…"
+            placeholder={t("games.search")}
           />
         </div>
 
@@ -418,8 +416,8 @@ export default function SplitTunnel({ connection, onConnect }: {
                         onError={(event) => { event.currentTarget.hidden = true; }} />}
                     </div>
                     <strong>{game.name}</strong>
-                    <span>{match ? (selected ? "Selected" : "Available") :
-                      installed.length > 1 ? "Choose an executable below" : "Not detected"}</span>
+                    <span>{match ? (selected ? t("status.selected") : t("status.available")) :
+                      installed.length > 1 ? t("games.chooseExecutable") : t("status.notInstalled")}</span>
                   </button>
                 );
               })}
@@ -440,12 +438,11 @@ export default function SplitTunnel({ connection, onConnect }: {
               size={28}
             />
 
-            Scanning Windows
-            applications...
+            {t("games.scanning")}
           </div>
         ) : (
           <>
-          <h3>Your Windows apps</h3>
+          <h3>{t("games.yourWindowsApps")}</h3>
           <div className="splitAppList">
             {visibleApps.map(
               (app) => {
@@ -488,7 +485,7 @@ export default function SplitTunnel({ connection, onConnect }: {
 
                         {app.running && (
                           <span className="runningBadge">
-                            RUNNING
+                            {t("status.running")}
                           </span>
                         )}
                       </div>
@@ -525,7 +522,7 @@ export default function SplitTunnel({ connection, onConnect }: {
             {!visibleApps.length &&
               !loading && (
                 <div className="splitEmpty">
-                  No applications found.
+                  {t("games.noneFound")}
                 </div>
               )}
           </div>
@@ -535,18 +532,13 @@ export default function SplitTunnel({ connection, onConnect }: {
         <div className="splitFooter">
           <div>
             <strong>
-              {
-                state
-                  .selectedApps
-                  .length
-              }{" "}
-              apps selected
+              {t("games.appsSelected", { count: state.selectedApps.length })}
             </strong>
 
             <span>
               {state.selectedApps.length === 0
-                ? "Select at least one game or app to connect."
-                : "Only the selected apps use the tunnel."}
+                ? t("games.selectAtLeastOne")
+                : t("games.selectedOnly")}
             </span>
           </div>
 
@@ -567,9 +559,9 @@ export default function SplitTunnel({ connection, onConnect }: {
                 connection === "disconnecting" ||
                 (connection !== "connected" && state.selectedApps.length === 0)}
             >
-              {connection === "connected" ? "Disconnect" :
-                connection === "disconnecting" ? "Disconnecting…" :
-                saving || connection === "connecting" ? "Connecting…" : "Connect selected"}
+              {connection === "connected" ? t("games.disconnect") :
+                connection === "disconnecting" ? t("games.disconnecting") :
+                saving || connection === "connecting" ? t("games.connecting") : t("games.connectSelected")}
             </button>
           </div>
         </div>

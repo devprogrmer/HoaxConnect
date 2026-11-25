@@ -72,3 +72,19 @@ test("primary navigation is translated instead of hardcoded", () => {
   assert.match(app, /t\("nav\.networkDoctor"\)/);
   assert.match(app, /t\("nav\.settings"\)/);
 });
+
+test("Games and Apps actions and states use translation keys", () => {
+  const splitTunnel = rendererSources[1];
+  for (const key of [
+    "games.yourApps",
+    "games.refresh",
+    "games.addExe",
+    "games.connectSelected",
+    "games.disconnect",
+    "status.running",
+    "status.selected",
+    "status.notInstalled",
+  ]) {
+    assert.match(splitTunnel, new RegExp(`t\\(\\"${key.replaceAll(".", "\\.")}\\"`));
+  }
+});
