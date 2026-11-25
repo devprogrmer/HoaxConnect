@@ -33,6 +33,7 @@ jobs:
       - run: npm run lint
       - run: npm run test:electron
       - run: npm run test:vpn-ui
+      - run: npm run test:i18n
       - run: npm run test:update-artifacts
       - run: npm run build
 

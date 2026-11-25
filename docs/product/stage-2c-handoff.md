@@ -597,6 +597,28 @@ Stage 5 final recovery and expiry checkpoint (2026-11-23):
 
 Still unverified / next starting point:
 
+Windows bilingual game-library candidate (2026-11-25):
+
+- Version 0.4.3 adds persisted English/Persian selection with immediate
+  LTR/RTL switching on authentication and Settings. Authentication, primary
+  navigation and the complete Games & Apps workflow use the shared locale
+  dictionaries.
+- Installed-game discovery now reads Steam libraries (including secondary
+  libraries), Epic manifests, Windows uninstall records, Start Menu shortcuts
+  and running processes. Registry entries that expose only an install folder
+  are inspected for top-level executables. Unknown installed executables stay
+  selectable; local exact paths remain the routing authority.
+- Steam-discovered entries use permitted Steam artwork when available and
+  retain a local fallback. Multiple plausible Steam executables remain separate
+  choices instead of silently choosing a helper process.
+- This does not copy ExitLag's proprietary catalog or artwork and does not
+  claim that a finite built-in list contains every game. Completeness for this
+  candidate means supported discovery shows the games actually installed on
+  the Windows device; manual EXE selection remains the fallback.
+- In-app publication is gated on the final GitHub Windows workflow, installer
+  smoke test and update-delta verification. Real-device launcher coverage and
+  selected-only traffic behavior still require acceptance testing after update.
+
 - Confirm an authenticated, consented report from the packaged 0.3.10 client
   is visible in the production Admin panel. API health and the Admin page alone
   do not prove that reporting workflow.
