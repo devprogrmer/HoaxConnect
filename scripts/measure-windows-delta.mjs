@@ -2,8 +2,21 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 
-const [previousPath, nextPath] = process.argv.slice(2);
-assert.ok(previousPath && nextPath, "Usage: measure-windows-delta.mjs OLD.blockmap NEW.blockmap");
+const [previousPath, nextPath, maximumChangedBytesInput] = process.argv.slice(2);
+assert.ok(
+  previousPath && nextPath,
+  "Usage: measure-windows-delta.mjs OLD.blockmap NEW.blockmap [MAX_CHANGED_BYTES]",
+);
+
+const maximumChangedBytes = maximumChangedBytesInput
+  ? Number(maximumChangedBytesInput)
+  : null;
+if (maximumChangedBytes !== null) {
+  assert.ok(
+    Number.isSafeInteger(maximumChangedBytes) && maximumChangedBytes > 0,
+    "MAX_CHANGED_BYTES must be a positive safe integer",
+  );
+}
 
 async function readBlockmap(path) {
   const map = JSON.parse(gunzipSync(await readFile(path)));
@@ -28,3 +41,9 @@ for (const file of next) {
 }
 assert.ok(installerBytes > 0);
 console.log(JSON.stringify({ installerBytes, estimatedChangedBytes: changedBytes }));
+if (maximumChangedBytes !== null) {
+  assert.ok(
+    changedBytes <= maximumChangedBytes,
+    `Windows update delta is ${changedBytes} bytes; maximum allowed is ${maximumChangedBytes} bytes`,
+  );
+}

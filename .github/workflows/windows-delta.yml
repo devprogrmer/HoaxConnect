@@ -45,4 +45,7 @@ jobs:
           curl --fail --silent --show-error --max-time 30 \
             https://hoaxnet.ir/updates/HoaxConnect-0.4.0-Setup.exe.blockmap \
             --output baseline.blockmap
-          node scripts/measure-windows-delta.mjs baseline.blockmap candidate/HoaxConnect-0.4.1-Setup.exe.blockmap
+          node scripts/measure-windows-delta.mjs \
+            baseline.blockmap \
+            candidate/HoaxConnect-0.4.1-Setup.exe.blockmap \
+            15000000
