@@ -1,7 +1,7 @@
 {
   "name": "hoaxconnect",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Windows gaming network diagnostics and VPN client",
   "author": "HoaxConnect",
   "type": "module",

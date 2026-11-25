@@ -14,6 +14,10 @@ on:
       - scripts/measure-windows-delta.mjs
   workflow_dispatch:
     inputs:
+      baseline_run:
+        description: Previous Windows installer workflow run ID
+        required: true
+        default: "45573891815"
       candidate_run:
         description: Windows installer workflow run ID
         required: true
@@ -37,15 +41,22 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
+          run-id: ${{ inputs.baseline_run || '45573891815' }}
+          name: HoaxConnect-Windows-x64
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
           run-id: ${{ inputs.candidate_run || github.event.workflow_run.id || '45558249447' }}
           name: HoaxConnect-Windows-x64
           path: candidate
-      - name: Compare with the 0.4.0 baseline
+      - name: Enforce the differential update limit
         run: |
-          curl --fail --silent --show-error --max-time 30 \
-            https://hoaxnet.ir/updates/HoaxConnect-0.4.0-Setup.exe.blockmap \
-            --output baseline.blockmap
+          baseline_blockmap=(baseline/HoaxConnect-*-Setup.exe.blockmap)
+          candidate_blockmap=(candidate/HoaxConnect-*-Setup.exe.blockmap)
+          test "${#baseline_blockmap[@]}" -eq 1
+          test "${#candidate_blockmap[@]}" -eq 1
           node scripts/measure-windows-delta.mjs \
-            baseline.blockmap \
-            candidate/HoaxConnect-0.4.1-Setup.exe.blockmap \
+            "${baseline_blockmap[0]}" \
+            "${candidate_blockmap[0]}" \
             15000000

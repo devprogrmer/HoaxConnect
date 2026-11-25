@@ -8,7 +8,7 @@ namespace HoaxConnect.Service.Tests;
 public sealed class SingBoxConfigBuilderTests
 {
     [Fact]
-    public void RoutesSelectedProcessesWithoutCapturingSystemDns()
+    public void RoutesOnlySelectedProcessesAndProtectsDnsOnWindows()
     {
         var request = new ConnectRequest(
             "generation-1",
@@ -20,8 +20,15 @@ public sealed class SingBoxConfigBuilderTests
         var tun = root.GetProperty("inbounds")[0];
         Assert.Equal("tun", tun.GetProperty("type").GetString());
         Assert.True(tun.GetProperty("auto_route").GetBoolean());
-        Assert.False(tun.GetProperty("strict_route").GetBoolean());
-        Assert.Equal("disabled", tun.GetProperty("dns_mode").GetString());
+        Assert.True(tun.GetProperty("strict_route").GetBoolean());
+        Assert.Equal("hijack", tun.GetProperty("dns_mode").GetString());
+
+        var dns = root.GetProperty("dns");
+        Assert.Equal("vpn-dns-0", dns.GetProperty("final").GetString());
+        var dnsServer = Assert.Single(dns.GetProperty("servers").EnumerateArray());
+        Assert.Equal("udp", dnsServer.GetProperty("type").GetString());
+        Assert.Equal("1.1.1.1", dnsServer.GetProperty("server").GetString());
+        Assert.Equal("wg", dnsServer.GetProperty("detour").GetString());
 
         var endpoint = root.GetProperty("endpoints")[0];
         Assert.Equal("wireguard", endpoint.GetProperty("type").GetString());
@@ -32,7 +39,12 @@ public sealed class SingBoxConfigBuilderTests
         var route = root.GetProperty("route");
         Assert.True(route.GetProperty("auto_detect_interface").GetBoolean());
         Assert.Equal("direct", route.GetProperty("final").GetString());
-        var selectedRule = Assert.Single(route.GetProperty("rules").EnumerateArray());
+        var rules = route.GetProperty("rules").EnumerateArray().ToArray();
+        Assert.Equal(2, rules.Length);
+        var dnsRule = rules[0];
+        Assert.Equal("hijack-dns", dnsRule.GetProperty("action").GetString());
+        Assert.Equal(53, dnsRule.GetProperty("port").GetInt32());
+        var selectedRule = rules[1];
         Assert.Equal("wg", selectedRule.GetProperty("outbound").GetString());
         Assert.Equal(2, selectedRule.GetProperty("process_path").GetArrayLength());
     }

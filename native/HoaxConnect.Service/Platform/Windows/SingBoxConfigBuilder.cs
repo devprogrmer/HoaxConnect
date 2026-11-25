@@ -15,6 +15,14 @@ public static class SingBoxConfigBuilder
         var assignedAddress = request.Authorization.AssignedAddress.Contains('/')
             ? request.Authorization.AssignedAddress
             : request.Authorization.AssignedAddress + (request.Authorization.AssignedAddress.Contains(':') ? "/128" : "/32");
+        if (request.Authorization.DnsServers.Count == 0)
+            throw new InvalidDataException("At least one VPN DNS server is required.");
+        var dnsServers = request.Authorization.DnsServers.Select((server, index) =>
+        {
+            if (!IPAddress.TryParse(server, out _))
+                throw new InvalidDataException("VPN DNS server is invalid.");
+            return new { type = "udp", tag = $"vpn-dns-{index}", server, server_port = 53, detour = "wg" };
+        }).ToArray();
 
         var config = new
         {
@@ -29,8 +37,8 @@ public static class SingBoxConfigBuilder
                     address = new[] { "172.19.0.1/30", "fdfe:dcba:9876::1/126" },
                     mtu = 1400,
                     auto_route = true,
-                    strict_route = false,
-                    dns_mode = "disabled",
+                    strict_route = true,
+                    dns_mode = "hijack",
                 }
             },
             endpoints = new object[]
@@ -55,12 +63,19 @@ public static class SingBoxConfigBuilder
                     }
                 }
             },
+            dns = new
+            {
+                servers = dnsServers,
+                final = dnsServers[0].tag,
+                strategy = "prefer_ipv4",
+            },
             outbounds = new object[] { new { type = "direct", tag = "direct" } },
             route = new
             {
                 auto_detect_interface = true,
                 rules = new object[]
                 {
+                    new { port = 53, action = "hijack-dns" },
                     new { process_path = request.ApplicationPaths, action = "route", outbound = "wg" },
                 },
                 final = "direct",
