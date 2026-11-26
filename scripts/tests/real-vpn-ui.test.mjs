@@ -15,6 +15,8 @@ test("dashboard connection uses the privileged VPN API instead of simulated succ
 
 test("dashboard sends only location preference and never executable paths", () => {
   assert.match(toggle, /countryCode: selectedServer\.countryCode\.toUpperCase\(\)/);
+  assert.match(source, /region: node\.region/);
+  assert.match(toggle, /region: selectedServer\.region/);
   assert.doesNotMatch(toggle, /applicationPaths|selectedApps|apps:/);
 });
 

@@ -61,6 +61,7 @@ type ServerInfo = {
   city: string;
   flag: string;
   countryCode: string;
+  region: string;
   load: number;
   protocol: "WireGuard" | "AmneziaWG";
 };
@@ -90,6 +91,7 @@ const EMPTY_SERVER: ServerInfo = {
   city: "No online node",
   flag: "",
   countryCode: "",
+  region: "",
   load: 0,
   protocol: "WireGuard",
 };
@@ -642,6 +644,7 @@ export default function App() {
         city: node.city || node.region,
         flag: "",
         countryCode: node.country_code.toLowerCase(),
+        region: node.region,
         load: node.load_percent,
         protocol: "WireGuard" as const,
       }));
@@ -783,7 +786,10 @@ export default function App() {
 
     setConnection("connecting");
     setVpnError("");
-    const result = await vpn.connect({ countryCode: selectedServer.countryCode.toUpperCase() });
+    const result = await vpn.connect({
+      countryCode: selectedServer.countryCode.toUpperCase(),
+      region: selectedServer.region,
+    });
     if (!result.ok) {
       setConnection("error");
       setVpnError(result.error.message);
