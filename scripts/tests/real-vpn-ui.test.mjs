@@ -6,6 +6,15 @@ const source = await readFile(new URL("../../src/App.tsx", import.meta.url), "ut
 const library = await readFile(new URL("../../src/SplitTunnel.tsx", import.meta.url), "utf8");
 const toggle = source.slice(source.indexOf("async function toggleConnection()"), source.indexOf("async function scanGameNow"));
 
+test("auto selection ranks the freshly fetched nodes instead of cached state", () => {
+  const refresh = source.slice(source.indexOf("async function refreshServers"), source.indexOf("async function autoSelect"));
+  const autoSelect = source.slice(source.indexOf("async function autoSelect"), source.indexOf("async function toggleConnection"));
+  assert.match(refresh, /return live;/);
+  assert.match(autoSelect, /const live = await refreshServers\(\)/);
+  assert.match(autoSelect, /const best = live\?\.reduce/);
+  assert.doesNotMatch(autoSelect, /\bservers\b/);
+});
+
 test("dashboard connection uses the privileged VPN API instead of simulated success", () => {
   assert.match(toggle, /await vpn\.connect\(/);
   assert.match(toggle, /await vpn\.disconnect\(\)/);
