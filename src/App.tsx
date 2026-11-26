@@ -653,6 +653,7 @@ export default function App() {
         live.some((server) => server.id === current) ? current : (live[0]?.id || ""),
       );
       if (showNotice) notify(`${live.length} live routes loaded.`);
+      return live;
     } finally {
       setTestingAll(false);
     }
@@ -738,8 +739,11 @@ export default function App() {
   }
 
   async function autoSelect() {
-    await refreshServers();
-    const best = [...servers].sort((a, b) => a.load - b.load)[0];
+    const live = await refreshServers();
+    const best = live?.reduce<ServerInfo | undefined>(
+      (current, candidate) => !current || candidate.load < current.load ? candidate : current,
+      undefined,
+    );
     if (!best) {
       notify("No live VPN route is currently available.");
       return;
