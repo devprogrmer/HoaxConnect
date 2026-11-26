@@ -29,7 +29,7 @@ test("packaged app defaults to HoaxConnect HTTPS Backend and accepts an override
       isPackaged: true,
       configuredUrl: "",
     }),
-    "https://hoaxnet.ir"
+    "https://api.hoaxnet.ir"
   );
 
   assert.equal(

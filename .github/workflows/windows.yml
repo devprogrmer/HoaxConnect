@@ -1,0 +1,170 @@
+name: Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - codex/**
+  pull_request:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:electron
+      - run: npm run test:vpn-ui
+      - run: npm run test:i18n
+      - run: npm run test:update-artifacts
+      - run: npm run build
+
+      - name: Fetch pinned routing engine
+        shell: powershell
+        run: ./scripts/fetch-windows-routing-engine.ps1
+
+      - name: Test Windows tunnel service
+        shell: powershell
+        run: |
+          $env:HC_SING_BOX_PATH = (Resolve-Path './native-bin/routing/sing-box.exe').Path
+          dotnet test ./native/HoaxConnect.Service.Tests/HoaxConnect.Service.Tests.csproj --configuration Release -p:NuGetAudit=false
+
+      - name: Build Windows traffic helper
+        shell: powershell
+        run: |
+          dotnet publish ./native/HoaxTraffic/HoaxTraffic.csproj -c Release -o ./native-bin/traffic-build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item ./native-bin/traffic-build/HoaxTraffic.exe ./native-bin/HoaxTraffic.exe
+
+      - name: Build and verify Windows installer
+        shell: powershell
+        run: |
+          npm run dist:win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = node -p "require('./package.json').version"
+          node ./scripts/verify-windows-update.mjs ./release $version
+
+      - name: Smoke test the installed Windows service
+        shell: powershell
+        run: |
+          $version = node -p "require('./package.json').version"
+          $installer = (Resolve-Path "./release/HoaxConnect-$version-Setup.exe").Path
+          $setup = Start-Process -FilePath $installer -ArgumentList '/S' -WindowStyle Hidden -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Setup exited with code $($setup.ExitCode)" }
+          $service = Get-CimInstance Win32_Service -Filter "Name='HoaxConnectTunnel'"
+          if ($service.State -ne 'Running' -or $service.StartName -ne 'LocalSystem') {
+            throw 'Setup did not start the HoaxConnect service as LocalSystem.'
+          }
+          node ./scripts/smoke-installed-tunnel.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HoaxConnect-Windows-x64
+          if-no-files-found: error
+          path: |
+            release/HoaxConnect-*-Setup.exe
+            release/HoaxConnect-*-Setup.exe.blockmap
+            release/latest.yml
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_DB: hoaxconnect_ci_test
+          POSTGRES_USER: hoaxconnect_ci
+          POSTGRES_PASSWORD: hoaxconnect_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hoaxconnect_ci -d hoaxconnect_ci_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      DATABASE_SSL: "false"
+      HC_STAGE2C_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      HC_STAGE2D_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      HC_STAGE2F_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      HC_STAGE5_TEST_DATABASE_URL: postgresql://hoaxconnect_ci:hoaxconnect_ci@127.0.0.1:5432/hoaxconnect_ci_test
+      JWT_ACCESS_SECRET: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      JWT_ISSUER: https://api.hoaxconnect.test
+      JWT_AUDIENCE: hoaxconnect-desktop
+      REFRESH_TOKEN_PEPPER: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      REFRESH_RECOVERY_ENCRYPTION_KEY: BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=
+      ADMIN_SECRET_ENCRYPTION_KEY: CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=
+      EMAIL_VERIFICATION_REQUIRED: "false"
+      EMAIL_PROVIDER: none
+      PAYMENT_PROVIDER: none
+      LOG_LEVEL: silent
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - run: npm run migrate
+        working-directory: backend
+      - run: node --import tsx --test --test-concurrency=1 tests/*.test.ts
+        working-directory: backend
+
+  update-delta:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: HoaxConnect-Windows-x64
+          path: candidate
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: "45573891815"
+          name: HoaxConnect-Windows-x64
+          path: baseline
+      - name: Enforce the post-bridge differential update limit
+        run: |
+          baseline_blockmap=(baseline/HoaxConnect-*-Setup.exe.blockmap)
+          candidate_blockmap=(candidate/HoaxConnect-*-Setup.exe.blockmap)
+          test "${#baseline_blockmap[@]}" -eq 1
+          test "${#candidate_blockmap[@]}" -eq 1
+          node scripts/measure-windows-delta.mjs \
+            "${baseline_blockmap[0]}" \
+            "${candidate_blockmap[0]}" \
+            25000000

@@ -54,6 +54,17 @@ contextBridge.exposeInMainWorld(
           "auth:logout-all"
         );
       },
+
+      onPolicy(handler) {
+        const listener = (_event, error) => handler(error);
+        ipcRenderer.on("auth:policy", listener);
+        return () => ipcRenderer.removeListener("auth:policy", listener);
+      },
+    },
+
+    reporting: {
+      getSettings: () => ipcRenderer.invoke("reporting:get-settings"),
+      setPermissions: (permissions) => ipcRenderer.invoke("reporting:set-permissions", permissions),
     },
 
     apps: {
@@ -82,6 +93,21 @@ contextBridge.exposeInMainWorld(
           "split:save",
           state
         );
+      },
+    },
+
+    vpn: {
+      nodes() {
+        return ipcRenderer.invoke("vpn:nodes");
+      },
+      status() {
+        return ipcRenderer.invoke("vpn:status");
+      },
+      connect(location = {}) {
+        return ipcRenderer.invoke("vpn:connect", { location });
+      },
+      disconnect() {
+        return ipcRenderer.invoke("vpn:disconnect");
       },
     },
 

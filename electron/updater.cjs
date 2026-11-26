@@ -3,9 +3,11 @@ const {
   ipcMain,
 } = require("electron");
 
-const {
-  autoUpdater,
-} = require("electron-updater");
+const electronUpdater = require("electron-updater");
+const { differentialOnlyUpdater } = require("./differential-only-updater.cjs");
+const autoUpdater = process.platform === "win32"
+  ? new (differentialOnlyUpdater(electronUpdater.NsisUpdater))()
+  : electronUpdater.autoUpdater;
 
 const fs = require("fs");
 const path = require("path");
@@ -153,8 +155,7 @@ function configureUpdater() {
 
   autoUpdater.autoDownload = false;
 
-  // Allow differential downloads. electron-updater
-  // falls back to the full installer if blockmaps are unavailable.
+  // Windows updates require a matching local installer and blockmaps.
   autoUpdater.disableDifferentialDownload = false;
 
   // User explicitly decides whether to install.

@@ -6,6 +6,10 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 
 import { registerAuthRoutes } from "./auth.js";
+import { registerAdminRoutes } from "./admin.js";
+import { registerClientReportRoutes } from "./client-reports.js";
+import { registerVpnAgentRoutes } from "./vpn-agent-routes.js";
+import { registerVpnRoutes } from "./vpn-routes.js";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError, installErrorHandlers } from "./errors.js";
@@ -15,7 +19,7 @@ const uuidPattern =
 
 export async function buildApp() {
   const app = Fastify({
-    trustProxy: "127.0.0.1",
+    trustProxy: config.trustedProxyIps,
     genReqId(request) {
       const incoming = request.headers["x-request-id"];
 
@@ -49,7 +53,7 @@ export async function buildApp() {
   });
 
   await app.register(cors, {
-    credentials: false,
+    credentials: true,
     origin(origin, callback) {
       if (!origin) {
         callback(null, true);
@@ -99,6 +103,10 @@ export async function buildApp() {
   });
 
   await registerAuthRoutes(app);
+  await registerAdminRoutes(app);
+  await registerClientReportRoutes(app);
+  await registerVpnAgentRoutes(app);
+  await registerVpnRoutes(app);
 
   return app;
 }

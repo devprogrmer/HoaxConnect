@@ -33,6 +33,8 @@ import {
 import "./App.css";
 import NetworkDoctor from "./NetworkDoctor";
 import SplitTunnel from "./SplitTunnel";
+import DeviceReportingSettings from "./DeviceReportingSettings";
+import { LanguageSwitcher, useI18n } from "./i18n";
 import {
   nativeAvailable,
   nativeDiagnostic,
@@ -48,7 +50,7 @@ type Page =
   | "subscription"
   | "settings";
 
-type ConnectionState = "idle" | "connecting" | "connected";
+type ConnectionState = HoaxVpnConnectionStatus;
 
 type ModalType = null | "forgot" | "register" | "buy";
 
@@ -59,17 +61,9 @@ type ServerInfo = {
   city: string;
   flag: string;
   countryCode: string;
+  region: string;
   load: number;
   protocol: "WireGuard" | "AmneziaWG";
-};
-
-type ServerResult = {
-  ping: number;
-  jitter: number;
-  packetLoss: number;
-  testedAt: number;
-  method?: "ICMP" | "TCP";
-  tcpLatency?: number | null;
 };
 
 type Plan = {
@@ -90,68 +84,17 @@ type AppSettings = {
   protocol: "Automatic" | "WireGuard" | "AmneziaWG";
 };
 
-const SERVERS: ServerInfo[] = [
-  {
-    id: "de-01",
-    name: "Germany #01",
-    country: "Germany",
-    city: "Frankfurt",
-    flag: "🇩🇪",
-    countryCode: "de",
-    load: 31,
-    protocol: "WireGuard",
-  },
-  {
-    id: "de-02",
-    name: "Germany #02",
-    country: "Germany",
-    city: "Frankfurt",
-    flag: "🇩🇪",
-    countryCode: "de",
-    load: 48,
-    protocol: "AmneziaWG",
-  },
-  {
-    id: "nl-01",
-    name: "Netherlands #01",
-    country: "Netherlands",
-    city: "Amsterdam",
-    flag: "🇳🇱",
-    countryCode: "nl",
-    load: 22,
-    protocol: "WireGuard",
-  },
-  {
-    id: "tr-01",
-    name: "Türkiye #01",
-    country: "Türkiye",
-    city: "Istanbul",
-    flag: "🇹🇷",
-    countryCode: "tr",
-    load: 17,
-    protocol: "WireGuard",
-  },
-  {
-    id: "fi-01",
-    name: "Finland #01",
-    country: "Finland",
-    city: "Helsinki",
-    flag: "🇫🇮",
-    countryCode: "fi",
-    load: 12,
-    protocol: "AmneziaWG",
-  },
-  {
-    id: "fr-01",
-    name: "France #01",
-    country: "France",
-    city: "Paris",
-    flag: "🇫🇷",
-    countryCode: "fr",
-    load: 39,
-    protocol: "WireGuard",
-  },
-];
+const EMPTY_SERVER: ServerInfo = {
+  id: "",
+  name: "No live route",
+  country: "Unavailable",
+  city: "No online node",
+  flag: "",
+  countryCode: "",
+  region: "",
+  load: 0,
+  protocol: "WireGuard",
+};
 
 const PLANS: Plan[] = [
   {
@@ -184,21 +127,6 @@ const PLANS: Plan[] = [
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function seed(value: string) {
-  return value.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
-}
-
-function makeResult(server: ServerInfo): ServerResult {
-  const value = seed(server.id);
-
-  return {
-    ping: 32 + (value % 54) + Math.floor(server.load / 8),
-    jitter: Number((1.2 + (value % 24) / 10).toFixed(1)),
-    packetLoss: value % 7 === 0 ? 0.4 : 0,
-    testedAt: Date.now(),
-  };
 }
 
 function Modal({
@@ -275,10 +203,13 @@ function Modal({
 function Login({
   onLogin,
   onModal,
+  initialError,
 }: {
   onLogin: () => void;
   onModal: (modal: ModalType) => void;
+  initialError: string;
 }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
@@ -286,7 +217,7 @@ function Login({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -384,25 +315,26 @@ function Login({
 
       <section className="loginPanel">
         <form className="loginCard" onSubmit={submit}>
+          <LanguageSwitcher />
           <div className="loginHeader">
             <span className="eyebrow">
-              {mode === "login" ? "WELCOME BACK" : "NEW ACCOUNT"}
+              {mode === "login" ? t("auth.welcomeBack") : t("auth.newAccount")}
             </span>
             <h2>
               {mode === "login"
-                ? "Sign in to HoaxConnect"
-                : "Create your account"}
+                ? t("auth.signInTitle")
+                : t("auth.createTitle")}
             </h2>
             <p>
               {mode === "login"
-                ? "Sign in securely with your account and this device."
-                : "Your phone number is not verified until phone verification is available."}
+                ? t("auth.signInDescription")
+                : t("auth.createDescription")}
             </p>
           </div>
 
           {mode === "login" ? (
             <label className="inputGroup">
-              <span>USERNAME OR EMAIL</span>
+              <span>{t("auth.identifier")}</span>
               <input
                 autoComplete="username"
                 value={identifier}
@@ -415,7 +347,7 @@ function Login({
           ) : (
             <>
               <label className="inputGroup">
-                <span>EMAIL</span>
+                <span>{t("auth.email")}</span>
                 <input
                   type="email"
                   autoComplete="email"
@@ -426,7 +358,7 @@ function Login({
                 />
               </label>
               <label className="inputGroup">
-                <span>PHONE NUMBER</span>
+                <span>{t("auth.phone")}</span>
                 <input
                   type="tel"
                   autoComplete="tel"
@@ -439,7 +371,7 @@ function Login({
                 />
               </label>
               <label className="inputGroup">
-                <span>USERNAME</span>
+                <span>{t("auth.username")}</span>
                 <input
                   autoComplete="username"
                   value={username}
@@ -454,7 +386,7 @@ function Login({
           )}
 
           <label className="inputGroup">
-            <span>PASSWORD</span>
+            <span>{t("auth.password")}</span>
             <input
               type="password"
               autoComplete={mode === "login" ? "current-password" : "new-password"}
@@ -481,22 +413,22 @@ function Login({
                 onClick={() => onModal("forgot")}
                 disabled={loading}
               >
-                Forgot password?
+                {t("auth.forgotPassword")}
               </button>
             </div>
           )}
 
           <button className="loginButton" disabled={loading}>
             {loading
-              ? mode === "login" ? "SIGNING IN..." : "CREATING ACCOUNT..."
-              : mode === "login" ? "SIGN IN" : "CREATE ACCOUNT"}
+              ? mode === "login" ? t("auth.signingIn") : t("auth.creatingAccount")
+              : mode === "login" ? t("auth.signIn") : t("auth.createAccount")}
             {!loading && <ChevronRight size={19} />}
           </button>
 
           <p className="loginFooter">
             {mode === "login"
-              ? "Don't have an account? "
-              : "Already have an account? "}
+              ? `${t("auth.noAccount")} `
+              : `${t("auth.hasAccount")} `}
             <button
               type="button"
               disabled={loading}
@@ -504,7 +436,7 @@ function Login({
                 switchMode(mode === "login" ? "register" : "login")
               }
             >
-              {mode === "login" ? "Create one" : "Sign in"}
+              {mode === "login" ? t("auth.createOne") : t("auth.signIn")}
             </button>
           </p>
         </form>
@@ -514,14 +446,19 @@ function Login({
 }
 
 export default function App() {
+  const { t } = useI18n();
   const [loggedIn, setLoggedIn] = useState(false);
+  const [authNotice, setAuthNotice] = useState("");
   const [authChecking, setAuthChecking] = useState(
     Boolean(window.hoax?.auth)
   );
-  const [page, setPage] = useState<Page>("dashboard");
+  const [page, setPage] = useState<Page>("split-tunnel");
   const [modal, setModal] = useState<ModalType>(null);
   const [toast, setToast] = useState("");
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [connection, setConnection] =
+    useState<ConnectionState>("idle");
+  const [vpnError, setVpnError] = useState("");
 
   async function performSignOut(allDevices: boolean) {
     if (logoutBusy) return;
@@ -536,6 +473,9 @@ export default function App() {
 
     setLogoutBusy(true);
     try {
+      if (window.hoax?.vpn) {
+        await window.hoax.vpn.disconnect();
+      }
       const result = allDevices
         ? await auth.logoutAll()
         : await auth.logout();
@@ -571,6 +511,13 @@ export default function App() {
     if (!auth) return;
     const authApi = auth;
 
+    const unsubscribe = authApi.onPolicy((error) => {
+      if (error.code !== "ACCOUNT_SUSPENDED" && error.code !== "ACCOUNT_BANNED") return;
+      setAuthNotice(error.message);
+      setLoggedIn(false);
+      setConnection("idle");
+    });
+
     let cancelled = false;
 
     async function restoreSession() {
@@ -580,6 +527,11 @@ export default function App() {
 
         if (current.state.status === "restore_required") {
           const restored = await authApi.restore();
+          if (!restored.ok &&
+            (restored.error.code === "ACCOUNT_SUSPENDED" || restored.error.code === "ACCOUNT_BANNED") &&
+            !cancelled) {
+            setAuthNotice(restored.error.message);
+          }
           if (
             restored.ok &&
             restored.state.status === "authenticated" &&
@@ -604,16 +556,40 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
-  const [selectedServerId, setSelectedServerId] = useState(SERVERS[0].id);
-  const [results, setResults] = useState<Record<string, ServerResult>>({});
-  const [testingServer, setTestingServer] = useState<string | null>(null);
-  const [testingAll, setTestingAll] = useState(false);
+  useEffect(() => {
+    const vpn = window.hoax?.vpn;
+    if (!loggedIn || !vpn) return;
+    const vpnApi = vpn;
+    let disposed = false;
+    let busy = false;
+    async function refreshVpnState() {
+      if (disposed || busy) return;
+      busy = true;
+      try {
+        const result = await vpnApi.status();
+        if (!disposed && result.ok) {
+          setConnection(result.state.status);
+          setVpnError(result.state.error?.message || "");
+        }
+      } finally {
+        busy = false;
+      }
+    }
+    void refreshVpnState();
+    const timer = window.setInterval(refreshVpnState, 2000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [loggedIn]);
 
-  const [connection, setConnection] =
-    useState<ConnectionState>("idle");
+  const [servers, setServers] = useState<ServerInfo[]>([]);
+  const [selectedServerId, setSelectedServerId] = useState("");
+  const [testingAll, setTestingAll] = useState(false);
 
   const [download, setDownload] = useState(0);
   const [upload, setUpload] = useState(0);
@@ -646,11 +622,53 @@ export default function App() {
   });
 
   const selectedServer = useMemo(
-    () => SERVERS.find((server) => server.id === selectedServerId) ?? SERVERS[0],
-    [selectedServerId]
+    () => servers.find((server) => server.id === selectedServerId) ?? servers[0] ?? EMPTY_SERVER,
+    [selectedServerId, servers]
   );
 
-  const selectedResult = results[selectedServer.id];
+  async function refreshServers(showNotice = false) {
+    const vpn = window.hoax?.vpn;
+    if (!vpn) return;
+    setTestingAll(true);
+    try {
+      const response = await vpn.nodes();
+      if (!response.ok || !response.nodes) {
+        if (showNotice) notify(response.error?.message || "Live routes could not be loaded.");
+        return;
+      }
+      const displayNames = new Intl.DisplayNames(["en"], { type: "region" });
+      const live = response.nodes.map((node) => ({
+        id: node.id,
+        name: node.name,
+        country: displayNames.of(node.country_code) || node.country_code,
+        city: node.city || node.region,
+        flag: "",
+        countryCode: node.country_code.toLowerCase(),
+        region: node.region,
+        load: node.load_percent,
+        protocol: "WireGuard" as const,
+      }));
+      setServers(live);
+      setSelectedServerId((current) =>
+        live.some((server) => server.id === current) ? current : (live[0]?.id || ""),
+      );
+      if (showNotice) notify(`${live.length} live routes loaded.`);
+      return live;
+    } finally {
+      setTestingAll(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!loggedIn) {
+      setServers([]);
+      setSelectedServerId("");
+      return;
+    }
+    void refreshServers();
+    const timer = window.setInterval(() => void refreshServers(), 15000);
+    return () => window.clearInterval(timer);
+  }, [loggedIn]);
 
   function notify(message: string) {
     setToast(message);
@@ -663,17 +681,6 @@ export default function App() {
 
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  useEffect(() => {
-    if (connection !== "connected") return;
-
-    const interval = window.setInterval(() => {
-      setDownload((old) => Number((old + 0.013).toFixed(3)));
-      setUpload((old) => Number((old + 0.003).toFixed(3)));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [connection]);
 
   useEffect(() => {
     if (
@@ -727,97 +734,74 @@ export default function App() {
     };
   }, [loggedIn, page]);
 
-  async function testServer(server: ServerInfo) {
-    setTestingServer(server.id);
-
-    await sleep(650);
-
-    const result = makeResult(server);
-
-    setResults((old) => ({
-      ...old,
-      [server.id]: result,
-    }));
-
-    setTestingServer(null);
-
-    return result;
-  }
-
   async function testAllServers() {
-    setTestingAll(true);
-
-    const next: Record<string, ServerResult> = {};
-
-    for (const server of SERVERS) {
-      setTestingServer(server.id);
-      await sleep(280);
-      next[server.id] = makeResult(server);
-    }
-
-    setResults(next);
-    setTestingServer(null);
-    setTestingAll(false);
-    notify("All server routes tested.");
+    await refreshServers(true);
   }
 
   async function autoSelect() {
-    setTestingAll(true);
-
-    const next: Record<string, ServerResult> = {};
-
-    for (const server of SERVERS) {
-      setTestingServer(server.id);
-      await sleep(240);
-      next[server.id] = makeResult(server);
+    const live = await refreshServers();
+    const best = live?.reduce<ServerInfo | undefined>(
+      (current, candidate) => !current || candidate.load < current.load ? candidate : current,
+      undefined,
+    );
+    if (!best) {
+      notify("No live VPN route is currently available.");
+      return;
     }
-
-    setResults(next);
-
-    const best = [...SERVERS].sort((a, b) => {
-      const scoreA =
-        next[a.id].ping +
-        next[a.id].jitter * 3 +
-        next[a.id].packetLoss * 20 +
-        a.load * 0.15;
-
-      const scoreB =
-        next[b.id].ping +
-        next[b.id].jitter * 3 +
-        next[b.id].packetLoss * 20 +
-        b.load * 0.15;
-
-      return scoreA - scoreB;
-    })[0];
-
     setSelectedServerId(best.id);
-    setTestingServer(null);
-    setTestingAll(false);
-
-    notify(`Best route selected: ${best.name}`);
+    notify(`Lowest-load live route selected: ${best.name}`);
   }
 
   async function toggleConnection() {
     if (connection === "connected") {
-      setConnection("idle");
+      const vpn = window.hoax?.vpn;
+      if (!vpn) {
+        notify("The HoaxConnect tunnel service is unavailable.");
+        return;
+      }
+      setConnection("disconnecting");
+      const result = await vpn.disconnect();
+      if (!result.ok) {
+        setConnection("error");
+        setVpnError(result.error.message);
+        notify(result.error.message);
+        return;
+      }
+      setConnection(result.state.status);
+      setVpnError("");
       setDownload(0);
       setUpload(0);
       notify("Disconnected.");
       return;
     }
 
-    if (connection === "connecting") return;
+    if (connection === "connecting" || connection === "disconnecting") return;
 
-    setConnection("connecting");
-
-    if (!results[selectedServer.id]) {
-      await testServer(selectedServer);
+    const vpn = window.hoax?.vpn;
+    if (!vpn) {
+      notify("The HoaxConnect tunnel service is unavailable.");
+      return;
     }
 
-    await sleep(700);
+    if (!selectedServer.id) {
+      notify("No live VPN route is currently available.");
+      return;
+    }
 
-    setConnection("connected");
-    notify(`Connected to ${selectedServer.name}`);
+    setConnection("connecting");
+    setVpnError("");
+    const result = await vpn.connect({
+      countryCode: selectedServer.countryCode.toUpperCase(),
+      region: selectedServer.region,
+    });
+    if (!result.ok) {
+      setConnection("error");
+      setVpnError(result.error.message);
+      notify(result.error.message);
+      return;
+    }
+    setConnection(result.state.status);
+    notify(`Connected through ${selectedServer.country}.`);
   }
 
   async function scanGameNow(
@@ -932,12 +916,12 @@ export default function App() {
 
   function Sidebar() {
     const nav = [
-      ["dashboard", "Dashboard", <Gauge size={19} />],
-      ["servers", "Servers", <Server size={19} />],
-      ["game-test", "Game Test", <Gamepad2 size={19} />],
-      ["network", "Network Test", <Activity size={19} />],
-      ["network-doctor", "Network Doctor", <Activity size={19} />],
-      ["split-tunnel", "Split Tunnel", <Network size={19} />],
+      ["dashboard", t("nav.home"), <Gauge size={19} />],
+      ["servers", t("nav.servers"), <Server size={19} />],
+      ["game-test", t("nav.gameTest"), <Gamepad2 size={19} />],
+      ["network", t("nav.networkTest"), <Activity size={19} />],
+      ["network-doctor", t("nav.networkDoctor"), <Activity size={19} />],
+      ["split-tunnel", t("nav.gamesApps"), <Network size={19} />],
     ] as const;
 
     return (
@@ -976,7 +960,7 @@ export default function App() {
             onClick={() => setPage("subscription")}
           >
             <ShoppingBag size={19} />
-            Subscription
+            {t("nav.subscription")}
           </button>
 
           <button
@@ -984,7 +968,7 @@ export default function App() {
             onClick={() => setPage("settings")}
           >
             <Settings size={19} />
-            Settings
+            {t("nav.settings")}
           </button>
         </nav>
 
@@ -1089,6 +1073,10 @@ export default function App() {
                 ? "CONNECTION SECURED"
                 : connection === "connecting"
                   ? "CONNECTING..."
+                  : connection === "disconnecting"
+                    ? "DISCONNECTING..."
+                    : connection === "error"
+                      ? "CONNECTION ERROR"
                   : "READY TO CONNECT"}
             </div>
 
@@ -1096,13 +1084,21 @@ export default function App() {
               className={`powerButton ${
                 connection === "connected" ? "powerOn" : ""
               }`}
-              onClick={toggleConnection}
+              aria-label={connection === "connected" ? "Disconnect" : "Choose apps to connect"}
+              disabled={connection === "connecting" || connection === "disconnecting"}
+              onClick={() => {
+                if (connection === "connected") {
+                  void toggleConnection();
+                  return;
+                }
+                setPage("split-tunnel");
+              }}
             >
               <span className="powerHalo haloOne" />
               <span className="powerHalo haloTwo" />
 
               <div>
-                {connection === "connecting" ? (
+                {connection === "connecting" || connection === "disconnecting" ? (
                   <RefreshCw className="spin" size={41} />
                 ) : (
                   <Power size={41} strokeWidth={1.8} />
@@ -1115,12 +1111,18 @@ export default function App() {
                 ? "Connected"
                 : connection === "connecting"
                   ? "Connecting..."
+                  : connection === "disconnecting"
+                    ? "Disconnecting..."
+                    : connection === "error"
+                      ? "Connection failed"
                   : "Not connected"}
             </h2>
 
             <p>
               {connection === "connected"
                 ? `Protected through ${selectedServer.name}`
+                : connection === "error" && vpnError
+                  ? vpnError
                 : "Select a route and connect to HoaxConnect."}
             </p>
 
@@ -1195,34 +1197,28 @@ export default function App() {
               <div>
                 <span>
                   <Radio size={15} />
-                  PING
+                  ROUTE
                 </span>
 
-                <strong>
-                  {selectedResult?.ping ?? "--"} <small>ms</small>
-                </strong>
+                <strong>{selectedServer.id ? "LIVE" : "--"}</strong>
               </div>
 
               <div>
                 <span>
                   <Activity size={15} />
-                  JITTER
+                  LOAD
                 </span>
 
-                <strong>
-                  {selectedResult?.jitter ?? "--"} <small>ms</small>
-                </strong>
+                <strong>{selectedServer.id ? selectedServer.load : "--"} <small>%</small></strong>
               </div>
 
               <div>
                 <span>
                   <Wifi size={15} />
-                  PACKET LOSS
+                  TRANSPORT
                 </span>
 
-                <strong>
-                  {selectedResult?.packetLoss ?? "--"} <small>%</small>
-                </strong>
+                <strong>{selectedServer.protocol}</strong>
               </div>
             </div>
           </article>
@@ -1245,9 +1241,7 @@ export default function App() {
             </div>
 
             <div className="serverTable">
-              {SERVERS.slice(0, 4).map((server) => {
-                const result = results[server.id];
-
+              {servers.slice(0, 4).map((server) => {
                 return (
                   <button
                     key={server.id}
@@ -1279,14 +1273,8 @@ export default function App() {
                     </div>
 
                     <div className="serverMeta pingMeta">
-                      <span>PING</span>
-                      <strong>
-                        {testingServer === server.id
-                          ? "..."
-                          : result
-                            ? `${result.ping} ms`
-                            : "--"}
-                      </strong>
+                      <span>STATUS</span>
+                      <strong>LIVE</strong>
                     </div>
 
                     <ChevronRight size={18} />
@@ -1353,8 +1341,8 @@ export default function App() {
 
         <div className="pageToolbar">
           <div>
-            <strong>{SERVERS.length} available routes</strong>
-            <span>UI Test Mode — real node API comes next.</span>
+            <strong>{servers.length} live routes</strong>
+            <span>Only online Backend nodes with free capacity are shown.</span>
           </div>
 
           <button
@@ -1366,14 +1354,12 @@ export default function App() {
               size={16}
               className={testingAll ? "spin" : ""}
             />
-            TEST ALL
+            REFRESH
           </button>
         </div>
 
         <div className="fullServerList">
-          {SERVERS.map((server) => {
-            const result = results[server.id];
-
+          {servers.map((server) => {
             return (
               <article
                 className={`fullServerCard ${
@@ -1411,22 +1397,9 @@ export default function App() {
                 </div>
 
                 <div className="serverData">
-                  <span>PING</span>
-                  <strong>
-                    {testingServer === server.id
-                      ? "Testing..."
-                      : result
-                        ? `${result.ping} ms`
-                        : "--"}
-                  </strong>
+                  <span>STATUS</span>
+                  <strong>LIVE</strong>
                 </div>
-
-                <button
-                  className="testRouteButton"
-                  onClick={() => testServer(server)}
-                >
-                  TEST
-                </button>
 
                 <button
                   className="routeSelectButton"
@@ -2024,7 +1997,15 @@ export default function App() {
 
     return (
       <>
-        <PageHeader eyebrow="PREFERENCES" title="Settings" />
+        <PageHeader eyebrow={t("settings.preferences")} title={t("nav.settings")} />
+        <article className="genericCard languageSettingsCard">
+          <div>
+            <strong>{t("settings.languageTitle")}</strong>
+            <span>{t("settings.languageDescription")}</span>
+          </div>
+          <LanguageSwitcher />
+        </article>
+        <DeviceReportingSettings />
 
         <div className="settingsGrid">
           <article className="genericCard">
@@ -2121,7 +2102,7 @@ export default function App() {
               onClick={() => notify("Settings saved in UI Test Mode.")}
             >
               <Check size={17} />
-              SAVE SETTINGS
+              {t("settings.save")}
             </button>
           </article>
         </div>
@@ -2144,11 +2125,11 @@ export default function App() {
         return (
           <>
             <PageHeader
-              eyebrow="APPLICATION ROUTING"
-              title="Split Tunnel"
+              eyebrow="YOUR LIBRARY"
+              title="Games & Apps"
             />
 
-            <SplitTunnel />
+            <SplitTunnel connection={connection} onConnect={toggleConnection} />
           </>
         );
 
@@ -2188,7 +2169,7 @@ export default function App() {
   if (!loggedIn) {
     return (
       <>
-        <Login onLogin={() => setLoggedIn(true)} onModal={setModal} />
+        <Login onLogin={() => { setAuthNotice(""); setLoggedIn(true); }} onModal={setModal} initialError={authNotice} />
 
         <Modal
           type={modal}
