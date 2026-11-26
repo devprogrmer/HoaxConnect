@@ -23,6 +23,10 @@ Baseline: Windows branch at `77d4e95`. Windows is the first release target. Andr
 
 ## External dependencies
 
+Execution queue: route scoring → authenticated node probe discovery and a bounded probe scheduler → bind selected node to session allocation → direct/tunnel comparison → isolated failover → stable egress multipath. In parallel after routing integration, proceed with catalog/profiles and localization, then entitlement/payment and admin workflows, then release hardening and mobile feasibility.
+
+The route-quality module covers sample aggregation and fresh eligible-node ranking only. Next implementation task: expose node probe targets through the authenticated API, measure from Electron, and connect rankings to node-specific session allocation. Current Windows auto-selection still uses server load. Preserve load-based fallback when no valid measurements exist.
+
 - Isolated staging with at least two independently routed nodes for failover, and Windows test clients on different networks. The previous server deployment was removed.
 - Publisher signing credentials, test payment and verification accounts, and rights to distribute catalog artwork.
 - Field sessions for supported games and anti-cheat compatibility. A passing CI installer check does not establish live traffic isolation or game compatibility.
