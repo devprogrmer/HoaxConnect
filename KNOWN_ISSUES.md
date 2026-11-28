@@ -6,3 +6,4 @@
 - Production signing, commercial workflows and closed beta still require verification.
 - Route groups currently store topology only. Agent desired-state does not include inter-node routes, keys or forwarding policy; adding a group in Admin does not establish a tunnel or enable failover.
 - The operator's Iran host has an interrupted apt transaction with unconfigured packages and limited free disk space; run `dpkg --audit` and repair this independently of the isolated test containers before production deployment.
+- Generic multi-path selection operates on one managed Linux endpoint route and requires independent pre-existing routes for authenticated probes. It does not duplicate packets, connect multiple Windows entry nodes, or provide end-to-end session preservation.
