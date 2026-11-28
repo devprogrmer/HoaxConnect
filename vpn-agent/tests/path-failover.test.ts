@@ -31,3 +31,14 @@ test("retains the current path if both fail and retries a rejected route update"
   assert.equal(await policy.observe(degraded, healthy), "relay");
   assert.equal(await policy.observe(healthy, degraded), "primary");
 });
+
+test("controller initialized on a healthy relay keeps it while primary is degraded", async () => {
+  const changes: string[] = [];
+  const policy = new PathFailover(async (path) => { changes.push(path); }, "relay");
+  assert.equal(await policy.observe(degraded, healthy), "relay");
+  for (let round = 0; round < 4; round += 1) {
+    assert.equal(await policy.observe(healthy, healthy), "relay");
+  }
+  assert.equal(await policy.observe(healthy, healthy), "primary");
+  assert.deepEqual(changes, ["primary"]);
+});
