@@ -30,6 +30,10 @@ test("staging installs dedicated WG only, and withdrawal removes owned resources
     if (file === "ip" && args[0] === "link" && args[1] === "show" && !exists) throw new Error("not found");
     if (file === "ip" && args[0] === "link" && args[1] === "add") exists = true;
     if (file === "ip" && args[0] === "link" && args[1] === "del") exists = false;
+    if (command === "ip -4 route show table 20101") {
+      throw Object.assign(new Error("Dump terminated"),
+        { stderr: "Error: ipv4: FIB table does not exist.\nDump terminated\n" });
+    }
     if (command === `wg show ${group.interfaceName} latest-handshakes`) return {
       stdout: `${key("A")}\t${Math.floor(Date.now() / 1000)}\n`, stderr: "" };
     return { stdout: "", stderr: "" };

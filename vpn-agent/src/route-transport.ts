@@ -85,6 +85,14 @@ export class RouteTransport {
   private async show(file: string, args: string[]) {
     return (await this.run(file, args)).stdout;
   }
+  private async routeTable(table: number) {
+    try { return await this.show("ip", ["-4", "route", "show", "table", String(table)]); }
+    catch (error: any) {
+      const detail = `${error?.stderr ?? ""}\n${error?.message ?? ""}`;
+      if (/FIB table does not exist/.test(detail)) return "";
+      throw error;
+    }
+  }
   private async ownedRule(marker: string, action: "add" | "delete", args: string[]) {
     const rules = await this.show("nft", ["-a", "list", "chain", "ip", "filter", "DOCKER-USER"]);
     const line = rules.split("\n").find((row) => row.includes(`comment "${marker}"`));
@@ -145,7 +153,7 @@ export class RouteTransport {
       if (enable) {
         assert(!existing.split("\n").some((line) => line.startsWith(`${pref}:`) && !exact),
           "Route rule priority belongs to another service");
-        const other = await this.show("ip", ["-4", "route", "show", "table", String(group.routingTable)]);
+        const other = await this.routeTable(group.routingTable);
         assert(!other.trim() || other.trim() === `default dev ${group.interfaceName}`,
           "Route table belongs to another service");
         await this.run("ip", ["-4", "route", "replace", "default", "dev",
@@ -155,7 +163,7 @@ export class RouteTransport {
       } else {
         if (exact) await this.run("ip", ["-4", "rule", "del", "pref", pref,
           "from", group.clientCidr!, "lookup", String(group.routingTable)]);
-        const route = await this.show("ip", ["-4", "route", "show", "table", String(group.routingTable)]);
+        const route = await this.routeTable(group.routingTable);
         if (route.trim() === `default dev ${group.interfaceName}` ||
             route.trim().startsWith(`default dev ${group.interfaceName} `)) {
           await this.run("ip", ["-4", "route", "del", "default", "dev", group.interfaceName,
