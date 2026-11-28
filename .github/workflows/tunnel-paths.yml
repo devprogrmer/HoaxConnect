@@ -9,6 +9,7 @@ on:
     paths:
       - 'vpn-agent/**'
       - 'scripts/test-tunnel-paths.sh'
+      - 'scripts/test-route-transport.sh'
       - '.github/workflows/tunnel-paths.yml'
 
 permissions:
@@ -28,5 +29,6 @@ jobs:
       - run: npm ci --prefix vpn-agent
       - run: npm run build --prefix vpn-agent
       - run: npm test --prefix vpn-agent
-      - run: sudo apt-get update && sudo apt-get install -y wireguard-tools
+      - run: sudo apt-get update && sudo apt-get install -y wireguard-tools nftables curl
       - run: sudo env "PATH=$PATH:/usr/sbin" bash scripts/test-tunnel-paths.sh
+      - run: sudo env "PATH=$PATH:/usr/sbin" bash scripts/test-route-transport.sh

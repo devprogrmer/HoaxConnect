@@ -3,6 +3,7 @@ import { ControlClient } from "./control-client.js";
 import { loadOrEnrollIdentity } from "./identity.js";
 import { ensureRouteLinkKey } from "./route-link-key.js";
 import { Reconciler } from "./reconciler.js";
+import { RouteTransport } from "./route-transport.js";
 import { LinuxWireGuardAdapter } from "./wireguard.js";
 
 const agentVersion = "0.1.0";
@@ -22,14 +23,18 @@ async function run() {
   });
   const adapter = new LinuxWireGuardAdapter(config.interface.name);
   const reconciler = new Reconciler(adapter, config.interface, config.managedPeersPath);
+  const transport = new RouteTransport(config.stateDir, config.interface.name,
+    config.interface.egressInterface);
   let stopping = false;
   process.once("SIGTERM", () => { stopping = true; });
   process.once("SIGINT", () => { stopping = true; });
   let failures = 0;
+  let lastControlSuccess = Date.now();
   while (!stopping) {
     try {
       await reconciler.expireLeases();
       const desired = await client.desiredState();
+      lastControlSuccess = Date.now();
       for (let i = 0; i < desired.routeGroupDrafts.length; i += 4) {
         await Promise.all(desired.routeGroupDrafts.slice(i, i + 4).map(async (draft) => {
           const publicKey = await ensureRouteLinkKey(config.stateDir, draft.groupId);
@@ -37,6 +42,18 @@ async function run() {
         }));
       }
       await reconciler.reconcile(desired.peers);
+      try {
+        await transport.reconcile(desired.routeGroups);
+        for (const group of desired.routeGroups) {
+          const healthy = await transport.health(group);
+          if (group.phase === "active" && !healthy) await transport.withdraw();
+          await client.reportRouteGroup(group.groupId, group.configVersion, healthy,
+            healthy ? "wireguard-handshake-fresh" : "wireguard-handshake-missing");
+        }
+      } catch (transportError) {
+        await transport.withdraw().catch(() => undefined);
+        throw transportError;
+      }
       const snapshot = await adapter.snapshot();
       await client.heartbeat({
         agentVersion, publicEndpoint: config.publicEndpoint, publicKey: snapshot.publicKey,
@@ -48,6 +65,12 @@ async function run() {
       await delay(config.intervalMs);
     } catch (error) {
       failures += 1;
+      if (Date.now() - lastControlSuccess > 45_000) {
+        await transport.withdraw().catch((withdrawError) => {
+          process.stderr.write(`${JSON.stringify({ event: "route_withdraw_failed",
+            error: withdrawError instanceof Error ? withdrawError.message : "unknown error" })}\n`);
+        });
+      }
       await reconciler.expireLeases().catch((expiryError) => {
         process.stderr.write(`${JSON.stringify({ event: "lease_expiry_failed",
           error: expiryError instanceof Error ? expiryError.message : "unknown error" })}\n`);

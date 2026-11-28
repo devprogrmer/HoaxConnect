@@ -232,6 +232,26 @@ test(
       const renewed = await signedPost("/api/v1/vpn-agent/route-group-key",
         { ...routeKeyPayload, config_version: "2" });
       assert.equal(renewed.statusCode, 200, renewed.body);
+      await pool.query(`UPDATE vpn_nodes SET enabled = true, status = 'online',
+        last_seen_at = now() WHERE id = ANY($1::uuid[])`, [[nodeId, gateway.rows[0]!.id]]);
+      await pool.query(`UPDATE vpn_route_groups SET link_cidr = '10.253.73.0/24',
+        link_port = 51830, phase = 'staging', staged_at = now()
+        WHERE id = $1`, [groupId]);
+      await pool.query(`INSERT INTO vpn_route_group_node_keys(group_id,node_id,config_version,public_key)
+        VALUES ($1,$2,2,$3)`, [groupId, gateway.rows[0]!.id, randomBytes(32).toString("base64")]);
+      const stagedDesired = await signedPost("/api/v1/vpn-agent/desired-state", {});
+      assert.equal(stagedDesired.statusCode, 200, stagedDesired.body);
+      const routeGroup = stagedDesired.json().data.route_groups[0];
+      assert.equal(routeGroup.phase, "staging");
+      assert.equal(routeGroup.role, "entry");
+      assert.equal(routeGroup.link_address, "10.253.73.2/24");
+      assert.equal(routeGroup.peers[0].client_cidr, "10.88.0.0/24");
+      const report = await signedPost("/api/v1/vpn-agent/route-group-report", {
+        group_id: groupId, config_version: "2", healthy: true, detail: "probe-ok" });
+      assert.equal(report.statusCode, 200, report.body);
+      const staleReport = await signedPost("/api/v1/vpn-agent/route-group-report", {
+        group_id: groupId, config_version: "1", healthy: true, detail: "stale" });
+      assert.equal(staleReport.statusCode, 409, staleReport.body);
 
       const replay = await app.inject({
         method: "POST", url: path, headers: acceptedHeaders, payload: heartbeat,

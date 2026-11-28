@@ -528,12 +528,14 @@ test("route group topology edits are audited, versioned, and reject stale update
     const headers = requestHeaders({ cookie: operator.cookie, "x-csrf-token": operator.csrf });
     const created = await app.inject({ method: "POST", url: "/api/v1/admin/route-groups",
       headers, payload: { name: `test-${randomUUID()}`, gateway_node_id: ids[0],
-        entry_node_ids: [ids[1]], reason: "Create test topology" } });
+        entry_node_ids: [ids[1]], link_cidr: "10.253.71.0/24", link_port: 51830,
+        reason: "Create test topology" } });
     assert.equal(created.statusCode, 200, created.body);
     groupId = created.json().data.id;
     assert.equal(created.json().data.enabled, false);
     const update = { name: `test-${randomUUID()}`, gateway_node_id: ids[0],
-      entry_node_ids: [ids[2], ids[1]], config_version: "1", reason: "Update test topology" };
+      entry_node_ids: [ids[2], ids[1]], link_cidr: "10.253.71.0/24", link_port: 51830,
+      config_version: "1", reason: "Update test topology" };
     const changed = await app.inject({ method: "PATCH", url: `/api/v1/admin/route-groups/${groupId}`,
       headers, payload: update });
     assert.equal(changed.statusCode, 200, changed.body);
@@ -572,6 +574,32 @@ test("route group topology edits are audited, versioned, and reject stale update
       headers: requestHeaders({ cookie: operator.cookie }) });
     assert.equal(keysReady.json().data.key_exchange_ready, true);
     assert.equal(keysReady.json().data.transport_ready, false);
+    const phaseBody = { config_version: "2", reason: "Exercise staged routing" };
+    const staged = await app.inject({ method: "POST", url: `/api/v1/admin/route-groups/${groupId}/stage`,
+      headers, payload: phaseBody });
+    assert.equal(staged.statusCode, 200, staged.body);
+    const premature = await app.inject({ method: "POST", url: `/api/v1/admin/route-groups/${groupId}/activate`,
+      headers, payload: phaseBody });
+    assert.equal(premature.statusCode, 409, premature.body);
+    for (const id of ids) await pool.query(`INSERT INTO vpn_route_group_reports
+      (group_id,node_id,config_version,healthy) VALUES ($1,$2,2,true)`, [groupId,id]);
+    const readyTransport = await app.inject({ method: "GET",
+      url: `/api/v1/admin/route-groups/${groupId}/preflight`,
+      headers: requestHeaders({ cookie: operator.cookie }) });
+    assert.equal(readyTransport.json().data.transport_ready, true);
+    const active = await app.inject({ method: "POST", url: `/api/v1/admin/route-groups/${groupId}/activate`,
+      headers, payload: phaseBody });
+    assert.equal(active.statusCode, 200, active.body);
+    assert.equal(active.json().data.phase, "active");
+    await pool.query(`UPDATE vpn_route_group_reports SET reported_at = now() - interval '2 minutes'
+      WHERE group_id = $1 AND node_id = $2`, [groupId, ids[1]]);
+    await app.inject({ method: "GET", url: `/api/v1/admin/route-groups/${groupId}/preflight`,
+      headers: requestHeaders({ cookie: operator.cookie }) });
+    const rolledBack = await pool.query("SELECT phase, enabled FROM vpn_route_groups WHERE id = $1", [groupId]);
+    assert.deepEqual(rolledBack.rows[0], { phase: "failed", enabled: false });
+    const disabled = await app.inject({ method: "POST", url: `/api/v1/admin/route-groups/${groupId}/disable`,
+      headers, payload: phaseBody });
+    assert.equal(disabled.statusCode, 200, disabled.body);
     await pool.query("UPDATE vpn_nodes SET tunnel_cidr = '10.141.0.0/24' WHERE id = $1", [ids[2]]);
     const overlap = await app.inject({ method: "GET",
       url: `/api/v1/admin/route-groups/${groupId}/preflight`,

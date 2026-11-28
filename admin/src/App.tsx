@@ -871,7 +871,8 @@ function NodesPage({ refresh, admin, onAction, onRefresh }: { refresh: number; a
 
 type RouteGroupRecord = {
   id: string; name: string; gateway_node_id: string; entry_node_ids: string[];
-  enabled: boolean; config_version: string;
+  enabled: boolean; config_version: string; phase: string;
+  link_cidr: string; link_port: number; failure_reason: string | null;
 };
 
 function RouteGroupDialog({ group, nodes, busy, onClose, onSave }: {
@@ -882,18 +883,23 @@ function RouteGroupDialog({ group, nodes, busy, onClose, onSave }: {
   const [gateway, setGateway] = useState(group?.gateway_node_id ?? "");
   const [entries, setEntries] = useState<string[]>(group?.entry_node_ids ?? []);
   const [reason, setReason] = useState("");
+  const [linkCidr, setLinkCidr] = useState(group?.link_cidr ?? "10.253.17.0/24");
+  const [linkPort, setLinkPort] = useState(group?.link_port ?? 51830);
   const iranNodes = nodes.filter((node) => node.country_code === "IR" && node.status !== "disabled");
   const turkeyNodes = nodes.filter((node) => node.country_code === "TR" && node.status !== "disabled");
   return <div className="modal-backdrop"><form className="modal modal-wide" role="dialog" aria-modal="true" onSubmit={(event) => {
     event.preventDefault();
     onSave({ name, gateway_node_id: gateway, entry_node_ids: entries, reason,
+      link_cidr: linkCidr, link_port: linkPort,
       ...(group ? { config_version: group.config_version } : {}) });
   }}>
     <div className="modal-head"><div><span className="eyebrow">NETWORK / TOPOLOGY</span><h2>{group ? "Edit route group" : "Create route group"}</h2></div><button type="button" className="icon-button" title="Close" onClick={onClose}><X size={17} /></button></div>
-    <div className="notice notice-warning">A route group stores topology only. Saving it does not install a tunnel or enable traffic forwarding.</div>
+    <div className="notice notice-warning">Saving stores topology. Stage prepares WireGuard links; activation requires fresh handshakes from every member.</div>
     <label className="field"><span>Group name</span><input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={120} required /></label>
     <label className="field"><span>Turkey egress gateway</span><select value={gateway} onChange={(event) => setGateway(event.target.value)} required><option value="">Select gateway</option>{turkeyNodes.map((node) => <option value={node.id} key={node.id}>{node.name} · {node.region}</option>)}</select></label>
     <fieldset className="field"><legend>Iran entry nodes, in priority order</legend>{iranNodes.map((node) => <label className="toggle-field" key={node.id}><span><strong>{node.name}</strong><small>{node.region} · {node.public_endpoint}</small></span><input type="checkbox" checked={entries.includes(node.id)} onChange={(event) => setEntries((current) => event.target.checked ? [...current, node.id] : current.filter((id) => id !== node.id))} /></label>)}</fieldset>
+    <label className="field"><span>Dedicated private link network (/24)</span><input value={linkCidr} onChange={(event) => setLinkCidr(event.target.value)} required placeholder="10.253.17.0/24" /></label>
+    <label className="field"><span>Turkey gateway UDP link port</span><input type="number" min="1" max="65535" value={linkPort} onChange={(event) => setLinkPort(Number(event.target.value))} required /></label>
     <label className="field"><span>Reason (required)</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={8} maxLength={500} required rows={2} /></label>
     <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={busy || !gateway || entries.length === 0}>{busy ? "Saving…" : "Save route group"}</button></div>
   </form></div>;
@@ -929,14 +935,27 @@ function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
       onAction({ title: "Route group was not saved", description: error instanceof Error ? error.message : "Request failed.", endpoint: "", payload: {}, readOnly: true });
     } finally { setBusy(false); }
   }
+  async function changePhase(group: RouteGroupRecord, action: "stage" | "activate" | "disable") {
+    const reason = window.prompt(`Reason for ${action} (at least 8 characters):`);
+    if (!reason) return;
+    setBusy(true);
+    try {
+      await adminApi(`/route-groups/${group.id}/${action}`, { method: "POST",
+        body: jsonBody({ config_version: group.config_version, reason }) });
+      onRefresh(`Route group ${action} accepted; refresh health before routing users.`);
+    } catch (error) {
+      onAction({ title: `Could not ${action} route group`, description: error instanceof Error ? error.message : "Request failed.",
+        endpoint: "", payload: {}, readOnly: true });
+    } finally { setBusy(false); }
+  }
   return <>
-    <PageHeading eyebrow="NETWORK / TOPOLOGY" title="Route groups" description="Inventory of Iran entries and Turkey gateways. Activation and node configuration are still under development." action={canWrite ? <button className="primary-button" onClick={() => setEditing(null)}><Plus size={16} /> Add group</button> : undefined} />
-    <section className="section-panel table-panel">{groups.error ? <ErrorNotice message={groups.error} /> : groups.loading && !groups.data ? <LoadingLine /> : groups.data?.items.length ? <DataTable headers={["Group", "Turkey gateway", "Iran entries (priority)", "State", "Version", ""]}>{groups.data.items.map((group) => <tr key={group.id}><td><strong>{group.name}</strong></td><td>{nodes.data?.items.find((node) => node.id === group.gateway_node_id)?.name ?? group.gateway_node_id}</td><td>{group.entry_node_ids.map((id) => nodes.data?.items.find((node) => node.id === id)?.name ?? id).join(" → ")}</td><td><StatusBadge value={group.enabled ? "enabled" : "inactive"} /></td><td>{group.config_version}</td><td><button className="text-button" onClick={() => inspect(group.id)}>Check inventory</button>{canWrite && <button className="text-button" onClick={() => setEditing(group)}>Edit</button>}</td></tr>)}</DataTable> : <EmptyState title="No route groups" detail="Register an Iran entry and a Turkey gateway before creating a topology." />}</section>
+    <PageHeading eyebrow="NETWORK / TOPOLOGY" title="Route groups" description="Prepare Iran to Turkey links, check live handshakes, then explicitly activate forwarding." action={canWrite ? <button className="primary-button" onClick={() => setEditing(null)}><Plus size={16} /> Add group</button> : undefined} />
+    <section className="section-panel table-panel">{groups.error ? <ErrorNotice message={groups.error} /> : groups.loading && !groups.data ? <LoadingLine /> : groups.data?.items.length ? <DataTable headers={["Group", "Turkey gateway", "Iran entries (priority)", "Link", "State", "Version", ""]}>{groups.data.items.map((group) => <tr key={group.id}><td><strong>{group.name}</strong></td><td>{nodes.data?.items.find((node) => node.id === group.gateway_node_id)?.name ?? group.gateway_node_id}</td><td>{group.entry_node_ids.map((id) => nodes.data?.items.find((node) => node.id === id)?.name ?? id).join(" → ")}</td><td><code>{group.link_cidr}:{group.link_port}</code></td><td><StatusBadge value={group.phase} />{group.failure_reason && <small>{group.failure_reason}</small>}</td><td>{group.config_version}</td><td><button className="text-button" onClick={() => inspect(group.id)}>Check health</button>{canWrite && <><button className="text-button" disabled={busy || group.phase === "active" || group.phase === "staging"} onClick={() => setEditing(group)}>Edit</button>{group.phase === "inactive" && <button className="text-button" disabled={busy} onClick={() => changePhase(group, "stage")}>Stage</button>}{group.phase === "staging" && <button className="text-button" disabled={busy || !preflight?.transport_ready || preflight.group_id !== group.id} onClick={() => changePhase(group, "activate")}>Activate</button>}{group.phase !== "inactive" && <button className="text-button" disabled={busy} onClick={() => changePhase(group, "disable")}>Disable</button>}</>}</td></tr>)}</DataTable> : <EmptyState title="No route groups" detail="Register an Iran entry and a Turkey gateway before creating a topology." />}</section>
     {preflight && <section className="section-panel">
       <h2>Preflight inventory</h2>
       <p>{preflight.inventory_ready ? "Node inventory is ready for transport planning." : "Node inventory needs attention."}</p>
       <p>{preflight.key_exchange_ready ? "Each member has published a route key for the current topology version." : "Route key exchange is incomplete."}</p>
-      <p>Transport activation remains unavailable until per-node link addresses, forwarding, health checks and rollback are implemented.</p>
+      <p>{preflight.transport_ready ? "All nodes reported fresh WireGuard handshakes; activation is available." : "Transport is waiting for fresh handshakes from every member."}</p>
       {preflight.findings.map((item, index) => <p key={index}><code>{item.node_id}</code>: {item.code}</p>)}
     </section>}
     {editing !== undefined && (nodes.data ? <RouteGroupDialog group={editing} nodes={nodes.data.items} busy={busy} onClose={() => setEditing(undefined)} onSave={save} /> : <ErrorNotice message={nodes.error || "Loading nodes…"} />)}

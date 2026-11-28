@@ -1,6 +1,7 @@
 import { createHash, randomBytes, sign, type KeyObject } from "node:crypto";
 
 import type { DesiredPeer } from "./wireguard.js";
+import type { RouteGroup } from "./route-transport.js";
 
 type ControlOptions = {
   backendUrl: string;
@@ -13,7 +14,8 @@ type ControlOptions = {
 };
 
 type DesiredState = { peers: DesiredPeer[]; revocations: unknown[]; configVersion: number;
-  routeGroupDrafts: Array<{ groupId: string; configVersion: string }> };
+  routeGroupDrafts: Array<{ groupId: string; configVersion: string }>;
+  routeGroups: RouteGroup[] };
 
 function stableJson(value: unknown): string {
   if (value === null) return "null";
@@ -95,12 +97,27 @@ export class ControlClient {
     );
   }
 
+  async reportRouteGroup(groupId: string, configVersion: string, healthy: boolean, detail: string) {
+    return this.request("/api/v1/vpn-agent/route-group-report", {
+      group_id: groupId, config_version: configVersion, healthy, detail,
+    });
+  }
+
   async desiredState(): Promise<DesiredState> {
     const data = await this.request<any>("/api/v1/vpn-agent/desired-state", {});
     return {
       configVersion: Number(data.config_version), revocations: data.revocations ?? [],
       routeGroupDrafts: (data.route_group_drafts ?? []).map((item: any) => ({
         groupId: item.group_id, configVersion: item.config_version,
+      })),
+      routeGroups: (data.route_groups ?? []).map((g: any): RouteGroup => ({
+        groupId: g.group_id, configVersion: g.config_version, phase: g.phase,
+        role: g.role, interfaceName: g.interface_name, linkAddress: g.link_address,
+        gatewayLinkIp: g.gateway_link_ip, gatewayEndpoint: g.gateway_endpoint,
+        linkPort: g.link_port, routingTable: g.routing_table, clientCidr: g.client_cidr,
+        gatewayPublicKey: g.gateway_public_key,
+        peers: g.peers.map((p: any) => ({ nodeId: p.node_id, publicKey: p.public_key,
+          linkIp: p.link_ip, clientCidr: p.client_cidr })),
       })),
       peers: (data.peers ?? []).map((peer: any) => ({
         vpnSessionId: peer.vpn_session_id, publicKey: peer.public_key,

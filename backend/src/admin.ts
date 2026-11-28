@@ -25,6 +25,7 @@ import {
 import { hashPassword, verifyPassword } from "./security.js";
 import { revokeVpnSessions } from "./vpn-control.js";
 import { inspectRouteInventory, type InventoryNode } from "./route-group-preflight.js";
+import { failUnhealthyGroups } from "./route-group-transport.js";
 
 const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 const ADMIN_COOKIE_NAME = "hc_admin_session";
@@ -1017,6 +1018,8 @@ const routeGroupSchema = z.object({
   name: z.string().trim().min(2).max(120),
   gateway_node_id: uuidSchema,
   entry_node_ids: z.array(uuidSchema).min(1).max(20),
+  link_cidr: z.string().regex(/^(?:\d{1,3}\.){3}0\/24$/),
+  link_port: z.number().int().min(1).max(65535),
   reason: reasonSchema,
 }).strict().refine((input) => new Set(input.entry_node_ids).size === input.entry_node_ids.length, {
   message: "Entry nodes must be unique.",
@@ -1024,7 +1027,8 @@ const routeGroupSchema = z.object({
 
 async function listRouteGroups() {
   const groups = await pool.query(
-    `SELECT g.id, g.name, g.gateway_node_id, g.enabled, g.config_version::text,
+    `SELECT g.id, g.name, g.gateway_node_id, g.enabled, g.phase, g.failure_reason,
+            g.link_cidr::text, g.link_port, g.config_version::text,
             g.created_at, g.updated_at,
             COALESCE(array_agg(e.entry_node_id ORDER BY e.priority)
               FILTER (WHERE e.entry_node_id IS NOT NULL), '{}') AS entry_node_ids
@@ -1033,6 +1037,28 @@ async function listRouteGroups() {
      GROUP BY g.id ORDER BY g.name`,
   );
   return { data: { items: groups.rows } };
+}
+
+async function validateLinkAllocation(client: PoolClient, cidr: string, port: number,
+  gatewayId: string, excludeId?: string) {
+  const parsed = cidr.split(".").slice(0, 3).map(Number);
+  if (parsed.some((part) => part > 255) || parsed[0] === 0 || parsed[0]! >= 224) {
+    throw conflict("Choose a valid private /24 link network.");
+  }
+  if (!((parsed[0] === 10) || (parsed[0] === 172 && parsed[1]! >= 16 && parsed[1]! <= 31) ||
+    (parsed[0] === 192 && parsed[1] === 168))) {
+    throw conflict("Link CIDR must be private IPv4 space.");
+  }
+  // Serialize checks among concurrent admin requests; don't let two groups claim the same subnet/port.
+  await client.query("SELECT pg_advisory_xact_lock(2497801)");
+  const conflicts = await client.query(
+    `SELECT 1 FROM vpn_route_groups
+       WHERE id <> COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+         AND (link_cidr && $1::cidr OR (gateway_node_id = $3 AND link_port = $4))
+     UNION ALL SELECT 1 FROM vpn_nodes WHERE tunnel_cidr && $1::cidr LIMIT 1`,
+    [cidr, excludeId ?? null, gatewayId, port],
+  );
+  if (conflicts.rowCount) throw conflict("Link network or Turkey gateway UDP port overlaps an existing allocation.");
 }
 
 async function createRouteGroup(request: FastifyRequest, admin: AdminContext) {
@@ -1051,12 +1077,13 @@ async function createRouteGroup(request: FastifyRequest, admin: AdminContext) {
           input.entry_node_ids.some((id) => byId.get(id) !== "IR")) {
         throw conflict("Select one Turkey gateway and active Iran entry nodes.");
       }
+      await validateLinkAllocation(client, input.link_cidr, input.link_port, input.gateway_node_id);
       let group;
       try {
         group = await client.query(
-          `INSERT INTO vpn_route_groups(id, name, gateway_node_id)
-           VALUES ($1, $2, $3) RETURNING id, name, gateway_node_id, enabled, config_version::text`,
-          [groupId, input.name, input.gateway_node_id],
+          `INSERT INTO vpn_route_groups(id, name, gateway_node_id, link_cidr, link_port)
+           VALUES ($1, $2, $3, $4, $5) RETURNING id, name, gateway_node_id, enabled, config_version::text`,
+          [groupId, input.name, input.gateway_node_id, input.link_cidr, input.link_port],
         );
         for (const [index, nodeId] of input.entry_node_ids.entries()) {
           await client.query(
@@ -1106,13 +1133,16 @@ async function updateRouteGroup(request: FastifyRequest, admin: AdminContext) {
           input.entry_node_ids.some((id) => byId.get(id) !== "IR")) {
         throw conflict("Select one Turkey gateway and active Iran entry nodes.");
       }
+      await validateLinkAllocation(client, input.link_cidr, input.link_port,
+        input.gateway_node_id, groupId);
       try {
         const result = await client.query(
           `UPDATE vpn_route_groups SET name = $2, gateway_node_id = $3,
+                  link_cidr = $4, link_port = $5, phase = 'inactive', failure_reason = NULL,
                   config_version = config_version + 1
            WHERE id = $1
            RETURNING id, name, gateway_node_id, enabled, config_version::text`,
-          [groupId, input.name, input.gateway_node_id],
+          [groupId, input.name, input.gateway_node_id, input.link_cidr, input.link_port],
         );
         await client.query("DELETE FROM vpn_route_group_entries WHERE group_id = $1", [groupId]);
         for (const [index, nodeId] of input.entry_node_ids.entries()) {
@@ -1134,6 +1164,11 @@ async function updateRouteGroup(request: FastifyRequest, admin: AdminContext) {
 
 async function preflightRouteGroup(request: FastifyRequest) {
   const groupId = uuidSchema.parse((request.params as { groupId: string }).groupId);
+  const guard = await pool.connect();
+  try { await guard.query("BEGIN"); await failUnhealthyGroups(guard, groupId);
+    await guard.query("COMMIT"); }
+  catch (error) { await guard.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { guard.release(); }
   const group = await pool.query<{ gateway_node_id: string; enabled: boolean; config_version: string; entry_node_ids: string[] }>(
     `SELECT g.gateway_node_id, g.enabled, g.config_version::text,
             array_agg(e.entry_node_id ORDER BY e.priority) AS entry_node_ids
@@ -1162,14 +1197,85 @@ async function preflightRouteGroup(request: FastifyRequest) {
   const publicKeys = new Map(keys.rows.map((row) => [row.node_id, row.public_key]));
   const missing = ids.filter((id) => !publicKeys.has(id));
   const duplicate = new Set(publicKeys.values()).size !== publicKeys.size;
+  const reports = await pool.query<{ node_id: string; healthy: boolean }>(
+    `SELECT node_id, healthy FROM vpn_route_group_reports
+     WHERE group_id = $1 AND config_version = $2::bigint
+       AND reported_at > now() - interval '45 seconds'`, [groupId, route.config_version]);
+  const healthyMembers = new Set(reports.rows.filter((r) => r.healthy).map((r) => r.node_id));
   return { data: {
     group_id: groupId, config_version: route.config_version,
     ...inventory,
     key_exchange_ready: missing.length === 0 && !duplicate,
+    transport_ready: ids.every((id) => healthyMembers.has(id)),
     findings: [...inventory.findings,
       ...missing.map((node_id) => ({ node_id, code: "ROUTE_KEY_MISSING" })),
-      ...(duplicate ? [{ node_id: groupId, code: "DUPLICATE_ROUTE_KEY" }] : [])],
+      ...(duplicate ? [{ node_id: groupId, code: "DUPLICATE_ROUTE_KEY" }] : []),
+      ...ids.filter((id) => !healthyMembers.has(id)).map((node_id) =>
+        ({ node_id, code: "TRANSPORT_REPORT_MISSING" }))],
   } };
+}
+
+const routePhaseSchema = z.object({
+  config_version: z.string().regex(/^[1-9]\d*$/), reason: reasonSchema,
+}).strict();
+
+async function changeRoutePhase(request: FastifyRequest, admin: AdminContext,
+  action: "stage" | "activate" | "disable") {
+  const groupId = uuidSchema.parse((request.params as { groupId: string }).groupId);
+  const input = routePhaseSchema.parse(request.body);
+  const data = await auditedMutation(request, admin, `route_group.${action}`,
+    "vpn_route_group", groupId, input.reason, async (client) => {
+      const result = await client.query<{ phase: string; config_version: string;
+        gateway_node_id: string; link_cidr: string | null; link_port: number | null }>(
+        `SELECT phase, config_version::text, gateway_node_id,
+          link_cidr::text, link_port FROM vpn_route_groups WHERE id = $1 FOR UPDATE`, [groupId]);
+      const group = result.rows[0];
+      if (!group) throw notFound("Route group");
+      if (group.config_version !== input.config_version) throw conflict("Route group changed; refresh and retry.");
+      if (action === "disable") {
+        await client.query(`UPDATE vpn_route_groups SET phase = 'inactive', enabled = false,
+          failure_reason = NULL WHERE id = $1`, [groupId]);
+        return { phase: "inactive" };
+      }
+      if (group.phase !== (action === "stage" ? "inactive" : "staging")) {
+        throw conflict(`Route group must be ${action === "stage" ? "inactive" : "staging"}.`);
+      }
+      const entries = await client.query<{ entry_node_id: string }>(
+        `SELECT entry_node_id FROM vpn_route_group_entries WHERE group_id = $1 ORDER BY priority`, [groupId]);
+      const ids = [group.gateway_node_id, ...entries.rows.map((r) => r.entry_node_id)];
+      if (!group.link_cidr || !group.link_port || ids.length < 2) throw conflict("Link allocation is missing.");
+      const inventory = await client.query<InventoryNode>(
+        `SELECT id,country_code,status::text AS status,enabled,last_seen_at,
+          public_endpoint,public_key,tunnel_cidr::text AS tunnel_cidr,listen_port
+         FROM vpn_nodes WHERE id = ANY($1::uuid[])`, [ids]);
+      const check = inspectRouteInventory({ gateway_node_id: group.gateway_node_id,
+        entry_node_ids: ids.slice(1), nodes: inventory.rows });
+      if (!check.inventory_ready) throw conflict("Member inventory is not healthy.");
+      const keys = await client.query<{ node_id: string; public_key: string }>(
+        `SELECT node_id,public_key FROM vpn_route_group_node_keys
+         WHERE group_id = $1 AND config_version = $2::bigint`, [groupId, input.config_version]);
+      if (ids.some((id) => !keys.rows.some((r) => r.node_id === id)) ||
+          new Set(keys.rows.map((r) => r.public_key)).size !== ids.length) {
+        throw conflict("Current-version route keys are incomplete or duplicated.");
+      }
+      if (action === "stage") {
+        await client.query(`DELETE FROM vpn_route_group_reports WHERE group_id = $1`, [groupId]);
+        await client.query(`UPDATE vpn_route_groups SET phase = 'staging', enabled = false,
+          staged_at = now(), failure_reason = NULL WHERE id = $1`, [groupId]);
+        return { phase: "staging" };
+      }
+      const reports = await client.query<{ node_id: string }>(
+        `SELECT node_id FROM vpn_route_group_reports WHERE group_id = $1
+          AND config_version = $2::bigint AND healthy = true
+          AND reported_at > now() - interval '45 seconds'`, [groupId, input.config_version]);
+      if (ids.some((id) => !reports.rows.some((r) => r.node_id === id))) {
+        throw conflict("All members must report fresh healthy WireGuard handshakes before activation.");
+      }
+      await client.query(`UPDATE vpn_route_groups SET phase = 'active', enabled = true,
+        activated_at = now(), failure_reason = NULL WHERE id = $1`, [groupId]);
+      return { phase: "active" };
+    });
+  return { data };
 }
 
 async function listNodes() {
@@ -2492,6 +2598,11 @@ export async function registerAdminRoutes(
     adminHandler("nodes.write", async (request, _reply, admin) =>
       updateRouteGroup(request, admin), true),
   );
+  for (const action of ["stage", "activate", "disable"] as const) {
+    app.post(`/api/v1/admin/route-groups/:groupId/${action}`,
+      adminHandler("nodes.write", async (request, _reply, admin) =>
+        changeRoutePhase(request, admin, action), true));
+  }
 
   app.get(
     "/api/v1/admin/nodes",
