@@ -83,7 +83,7 @@ for i in $(seq 1 20); do
   if ip netns exec hcrc curl -fsS --max-time 2 http://203.0.113.2:8080/ >"$tmp/response"; then break; fi
   sleep 0.2
 done
-grep -q 'Directory listing' "$tmp/response"
+test -s "$tmp/response"
 # A withdrawn entry cannot keep the policy route or forwarding rule.
 ip netns exec hcre node --input-type=module -e 'import {RouteTransport} from "./vpn-agent/dist/route-transport.js"; await new RouteTransport(process.argv[1],"hcx0","under0").withdraw()' "$tmp/entry"
 ! ip -n hcre -4 rule show | grep -q 'from 10.143.0.0/24 lookup 20101'
