@@ -9,7 +9,12 @@ export class PathFailover {
   private unhealthyRounds = 0;
   private recoveryRounds = 0;
 
-  constructor(private readonly apply: (path: Path) => Promise<void>) {}
+  constructor(
+    private readonly apply: (path: Path) => Promise<void>,
+    initialPath: Path = "primary",
+  ) {
+    this.active = initialPath;
+  }
 
   // The caller serializes rounds so that probes and route updates never overlap.
   async observe(primary: PathReading, relay: PathReading): Promise<Path> {
