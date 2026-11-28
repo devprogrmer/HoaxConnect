@@ -1075,6 +1075,62 @@ async function createRouteGroup(request: FastifyRequest, admin: AdminContext) {
   return { data };
 }
 
+const routeGroupUpdateSchema = routeGroupSchema.extend({
+  config_version: z.string().regex(/^[1-9]\d*$/),
+});
+
+async function updateRouteGroup(request: FastifyRequest, admin: AdminContext) {
+  const groupId = uuidSchema.parse((request.params as { groupId: string }).groupId);
+  const input = routeGroupUpdateSchema.parse(request.body);
+  const data = await auditedMutation(request, admin, "route_group.update",
+    "vpn_route_group", groupId, input.reason, async (client) => {
+      const current = await client.query<{ enabled: boolean; config_version: string }>(
+        `SELECT enabled, config_version::text FROM vpn_route_groups
+         WHERE id = $1 FOR UPDATE`, [groupId],
+      );
+      if (!current.rowCount) throw notFound("Route group");
+      if (current.rows[0]!.enabled) {
+        throw conflict("Disable route group before editing its topology.");
+      }
+      if (current.rows[0]!.config_version !== input.config_version) {
+        throw conflict("Route group changed; refresh and retry.");
+      }
+      const nodes = await client.query<{ id: string; country_code: string }>(
+        `SELECT id, country_code FROM vpn_nodes
+         WHERE id = ANY($1::uuid[]) AND status <> 'disabled'
+         FOR SHARE`, [[input.gateway_node_id, ...input.entry_node_ids]],
+      );
+      const byId = new Map(nodes.rows.map((node) => [node.id, node.country_code]));
+      if (byId.get(input.gateway_node_id) !== "TR" ||
+          input.entry_node_ids.some((id) => byId.get(id) !== "IR")) {
+        throw conflict("Select one Turkey gateway and active Iran entry nodes.");
+      }
+      try {
+        const result = await client.query(
+          `UPDATE vpn_route_groups SET name = $2, gateway_node_id = $3,
+                  config_version = config_version + 1
+           WHERE id = $1
+           RETURNING id, name, gateway_node_id, enabled, config_version::text`,
+          [groupId, input.name, input.gateway_node_id],
+        );
+        await client.query("DELETE FROM vpn_route_group_entries WHERE group_id = $1", [groupId]);
+        for (const [index, nodeId] of input.entry_node_ids.entries()) {
+          await client.query(
+            `INSERT INTO vpn_route_group_entries(group_id, entry_node_id, priority)
+             VALUES ($1, $2, $3)`, [groupId, nodeId, index + 1],
+          );
+        }
+        return { ...result.rows[0], entry_node_ids: input.entry_node_ids };
+      } catch (error) {
+        if ((error as { code?: string }).code === "23505") {
+          throw conflict("A route group with this name already exists.");
+        }
+        throw error;
+      }
+    });
+  return { data };
+}
+
 async function listNodes() {
   const result = await pool.query(
     `SELECT n.id, n.name, n.country_code, n.region, n.city,
@@ -2381,6 +2437,12 @@ export async function registerAdminRoutes(
       async (request, _reply, admin) => createRouteGroup(request, admin),
       true,
     ),
+  );
+
+  app.patch(
+    "/api/v1/admin/route-groups/:groupId",
+    adminHandler("nodes.write", async (request, _reply, admin) =>
+      updateRouteGroup(request, admin), true),
   );
 
   app.get(

@@ -49,6 +49,7 @@ type View =
   | "plans"
   | "subscriptions"
   | "nodes"
+  | "route-groups"
   | "payments"
   | "security"
   | "providers"
@@ -93,6 +94,7 @@ const navGroups: Array<{ label: string; items: NavItem[] }> = [
     label: "NETWORK",
     items: [
       { id: "nodes", label: "VPN nodes", icon: Server, access: "nodes.read" },
+      { id: "route-groups", label: "Route groups", icon: Network, access: "nodes.read" },
     ],
   },
   {
@@ -867,6 +869,63 @@ function NodesPage({ refresh, admin, onAction, onRefresh }: { refresh: number; a
   </>;
 }
 
+type RouteGroupRecord = {
+  id: string; name: string; gateway_node_id: string; entry_node_ids: string[];
+  enabled: boolean; config_version: string;
+};
+
+function RouteGroupDialog({ group, nodes, busy, onClose, onSave }: {
+  group: RouteGroupRecord | null; nodes: NodeRecord[]; busy: boolean;
+  onClose: () => void; onSave: (payload: Record<string, unknown>) => void;
+}) {
+  const [name, setName] = useState(group?.name ?? "");
+  const [gateway, setGateway] = useState(group?.gateway_node_id ?? "");
+  const [entries, setEntries] = useState<string[]>(group?.entry_node_ids ?? []);
+  const [reason, setReason] = useState("");
+  const iranNodes = nodes.filter((node) => node.country_code === "IR" && node.status !== "disabled");
+  const turkeyNodes = nodes.filter((node) => node.country_code === "TR" && node.status !== "disabled");
+  return <div className="modal-backdrop"><form className="modal modal-wide" role="dialog" aria-modal="true" onSubmit={(event) => {
+    event.preventDefault();
+    onSave({ name, gateway_node_id: gateway, entry_node_ids: entries, reason,
+      ...(group ? { config_version: group.config_version } : {}) });
+  }}>
+    <div className="modal-head"><div><span className="eyebrow">NETWORK / TOPOLOGY</span><h2>{group ? "Edit route group" : "Create route group"}</h2></div><button type="button" className="icon-button" title="Close" onClick={onClose}><X size={17} /></button></div>
+    <div className="notice notice-warning">A route group stores topology only. Saving it does not install a tunnel or enable traffic forwarding.</div>
+    <label className="field"><span>Group name</span><input value={name} onChange={(event) => setName(event.target.value)} minLength={2} maxLength={120} required /></label>
+    <label className="field"><span>Turkey egress gateway</span><select value={gateway} onChange={(event) => setGateway(event.target.value)} required><option value="">Select gateway</option>{turkeyNodes.map((node) => <option value={node.id} key={node.id}>{node.name} · {node.region}</option>)}</select></label>
+    <fieldset className="field"><legend>Iran entry nodes, in priority order</legend>{iranNodes.map((node) => <label className="toggle-field" key={node.id}><span><strong>{node.name}</strong><small>{node.region} · {node.public_endpoint}</small></span><input type="checkbox" checked={entries.includes(node.id)} onChange={(event) => setEntries((current) => event.target.checked ? [...current, node.id] : current.filter((id) => id !== node.id))} /></label>)}</fieldset>
+    <label className="field"><span>Reason (required)</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={8} maxLength={500} required rows={2} /></label>
+    <div className="modal-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={busy || !gateway || entries.length === 0}>{busy ? "Saving…" : "Save route group"}</button></div>
+  </form></div>;
+}
+
+function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
+  refresh: number; admin: Admin; onAction: (action: ActionDialogState) => void; onRefresh: (message: string) => void;
+}) {
+  const groups = useResource<{ items: RouteGroupRecord[] }>("/route-groups", refresh);
+  const nodes = useResource<{ items: NodeRecord[] }>("/nodes", refresh);
+  const [editing, setEditing] = useState<RouteGroupRecord | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const canWrite = admin.role === "admin" || admin.role === "superadmin";
+  async function save(payload: Record<string, unknown>) {
+    setBusy(true);
+    try {
+      await adminApi(editing ? `/route-groups/${editing.id}` : "/route-groups", {
+        method: editing ? "PATCH" : "POST", body: jsonBody(payload),
+      });
+      setEditing(undefined);
+      onRefresh("Route group topology saved; no tunnel was activated.");
+    } catch (error) {
+      onAction({ title: "Route group was not saved", description: error instanceof Error ? error.message : "Request failed.", endpoint: "", payload: {}, readOnly: true });
+    } finally { setBusy(false); }
+  }
+  return <>
+    <PageHeading eyebrow="NETWORK / TOPOLOGY" title="Route groups" description="Inventory of Iran entries and Turkey gateways. Activation and node configuration are still under development." action={canWrite ? <button className="primary-button" onClick={() => setEditing(null)}><Plus size={16} /> Add group</button> : undefined} />
+    <section className="section-panel table-panel">{groups.error ? <ErrorNotice message={groups.error} /> : groups.loading && !groups.data ? <LoadingLine /> : groups.data?.items.length ? <DataTable headers={["Group", "Turkey gateway", "Iran entries (priority)", "State", "Version", ""]}>{groups.data.items.map((group) => <tr key={group.id}><td><strong>{group.name}</strong></td><td>{nodes.data?.items.find((node) => node.id === group.gateway_node_id)?.name ?? group.gateway_node_id}</td><td>{group.entry_node_ids.map((id) => nodes.data?.items.find((node) => node.id === id)?.name ?? id).join(" → ")}</td><td><StatusBadge value={group.enabled ? "enabled" : "inactive"} /></td><td>{group.config_version}</td><td>{canWrite && <button className="text-button" onClick={() => setEditing(group)}>Edit</button>}</td></tr>)}</DataTable> : <EmptyState title="No route groups" detail="Register an Iran entry and a Turkey gateway before creating a topology." />}</section>
+    {editing !== undefined && (nodes.data ? <RouteGroupDialog group={editing} nodes={nodes.data.items} busy={busy} onClose={() => setEditing(undefined)} onSave={save} /> : <ErrorNotice message={nodes.error || "Loading nodes…"} />)}
+  </>;
+}
+
 function SessionsPage({ refresh, onSelect }: { refresh: number; onSelect: (id: string) => void }) {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -1024,7 +1083,7 @@ function App() {
   if (!admin) return <Login onLogin={setAdmin} />;
   const visibleGroups = navGroups.map((group) => ({ ...group, items: group.items.filter((item) => hasRoleAccess(admin.role, item.access)) })).filter((group) => group.items.length > 0);
   const currentItem = navGroups.flatMap((group) => group.items).find((item) => item.id === view);
-  const titles: Record<View, string> = { overview: "Overview", alerts: "Alerts", traffic: "Traffic usage", users: "Users", "user-detail": "Account detail", sessions: "Sessions", plans: "Plans", subscriptions: "Subscriptions", nodes: "VPN nodes", payments: "Payments", security: "Audit & access", providers: "Integrations", admins: "Admin accounts" };
+  const titles: Record<View, string> = { overview: "Overview", alerts: "Alerts", traffic: "Traffic usage", users: "Users", "user-detail": "Account detail", sessions: "Sessions", plans: "Plans", subscriptions: "Subscriptions", nodes: "VPN nodes", "route-groups": "Route groups", payments: "Payments", security: "Audit & access", providers: "Integrations", admins: "Admin accounts" };
   function navigate(next: View) { setView(next); setMobileNav(false); }
 
   return <div className={`admin-shell ${mobileNav ? "nav-open" : ""}`}>
@@ -1047,6 +1106,7 @@ function App() {
         {view === "plans" && <PlansPage refresh={refresh} admin={admin} onAction={setAction} onRefresh={refreshPage} />}
         {view === "subscriptions" && <SubscriptionsPage refresh={refresh} admin={admin} onAction={setAction} onRefresh={refreshPage} />}
         {view === "nodes" && <NodesPage refresh={refresh} admin={admin} onAction={setAction} onRefresh={refreshPage} />}
+        {view === "route-groups" && <RouteGroupsPage refresh={refresh} admin={admin} onAction={setAction} onRefresh={refreshPage} />}
         {view === "payments" && <PaymentsPage refresh={refresh} />}
         {view === "security" && <SecurityPage refresh={refresh} admin={admin} />}
         {view === "providers" && <ProvidersPage refresh={refresh} admin={admin} onAction={setAction} onRefresh={refreshPage} />}

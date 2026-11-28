@@ -509,3 +509,47 @@ test(
     assert.equal(cannotEnableDisabled.statusCode, 409, cannotEnableDisabled.body);
   },
 );
+
+test("route group topology edits are audited, versioned, and reject stale updates", integrationOptions, async () => {
+  const operator = await login("superadmin");
+  const ids: string[] = [];
+  let groupId = "";
+  try {
+    for (const country of ["TR", "IR", "IR"]) {
+      const node = await pool.query(
+        `INSERT INTO vpn_nodes(name, country_code, region, hostname, public_endpoint,
+           public_key, capacity_peers, enabled, status)
+         VALUES ($1, $2, 'test', $3, '198.51.100.4:51820', $4, 10, false, 'offline')
+         RETURNING id`,
+        [`route-${randomUUID()}`, country, `${randomUUID()}.example.test`, randomBytes(32).toString("base64")],
+      );
+      ids.push(node.rows[0].id);
+    }
+    const headers = requestHeaders({ cookie: operator.cookie, "x-csrf-token": operator.csrf });
+    const created = await app.inject({ method: "POST", url: "/api/v1/admin/route-groups",
+      headers, payload: { name: `test-${randomUUID()}`, gateway_node_id: ids[0],
+        entry_node_ids: [ids[1]], reason: "Create test topology" } });
+    assert.equal(created.statusCode, 200, created.body);
+    groupId = created.json().data.id;
+    assert.equal(created.json().data.enabled, false);
+    const update = { name: `test-${randomUUID()}`, gateway_node_id: ids[0],
+      entry_node_ids: [ids[2], ids[1]], config_version: "1", reason: "Update test topology" };
+    const changed = await app.inject({ method: "PATCH", url: `/api/v1/admin/route-groups/${groupId}`,
+      headers, payload: update });
+    assert.equal(changed.statusCode, 200, changed.body);
+    assert.equal(changed.json().data.config_version, "2");
+    assert.deepEqual(changed.json().data.entry_node_ids, [ids[2], ids[1]]);
+    const stale = await app.inject({ method: "PATCH", url: `/api/v1/admin/route-groups/${groupId}`,
+      headers, payload: update });
+    assert.equal(stale.statusCode, 409, stale.body);
+    const rows = await pool.query(
+      "SELECT entry_node_id, priority FROM vpn_route_group_entries WHERE group_id = $1 ORDER BY priority", [groupId]);
+    assert.deepEqual(rows.rows.map((row: { entry_node_id: string }) => row.entry_node_id), [ids[2], ids[1]]);
+    const audit = await pool.query(
+      "SELECT action FROM admin_audit_logs WHERE resource_id = $1 AND action = 'route_group.update'", [groupId]);
+    assert.equal(audit.rowCount, 1);
+  } finally {
+    if (groupId) await pool.query("DELETE FROM vpn_route_groups WHERE id = $1", [groupId]);
+    if (ids.length) await pool.query("DELETE FROM vpn_nodes WHERE id = ANY($1::uuid[])", [ids]);
+  }
+});
