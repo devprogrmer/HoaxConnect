@@ -166,3 +166,52 @@ test("lease expiry fails closed by disconnecting the local service", async () =>
   assert.equal(connection.getState().error.code, "VPN_LEASE_EXPIRED");
 });
 
+
+test("disconnect waits for a pending connect and revokes the resulting session", async () => {
+  let release;
+  let remoteDisconnects = 0;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const connection = createVpnConnection({
+    api: {
+      authorize: async () => { await gate; return authorization(); },
+      disconnect: async () => { remoteDisconnects++; return { disconnected: true }; },
+    },
+    service: {
+      identity: async () => ({ publicKey: CLIENT_KEY }),
+      connect: async () => {},
+      disconnect: async () => {},
+    },
+  });
+
+  const connecting = connection.connect({ mode: "selected-only", apps: [APP] });
+  const disconnecting = connection.disconnect();
+  release();
+  await connecting;
+  await disconnecting;
+  assert.equal(remoteDisconnects, 1);
+  assert.equal(connection.getState().status, "idle");
+});
+
+test("simultaneous disconnects revoke the active lease once", async () => {
+  let release;
+  let calls = 0;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const connection = createVpnConnection({
+    api: {
+      authorize: async () => authorization(),
+      disconnect: async () => { calls++; await gate; return { disconnected: true }; },
+    },
+    service: {
+      identity: async () => ({ publicKey: CLIENT_KEY }),
+      connect: async () => {},
+      disconnect: async () => {},
+    },
+  });
+  await connection.connect({ mode: "selected-only", apps: [APP] });
+  const first = connection.disconnect();
+  const second = connection.disconnect();
+  release();
+  await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(connection.getState().status, "idle");
+});

@@ -40,6 +40,8 @@ function createVpnConnection({ api, service, clock = defaultClock }) {
   let state = { status: "idle", node: null, leaseExpiresAt: null, error: null };
   let leaseTimer = null;
   let activeGeneration = null;
+  let connecting = null;
+  let disconnecting = null;
 
   function cancelLeaseTimer() {
     if (leaseTimer !== null) {
@@ -84,7 +86,7 @@ function createVpnConnection({ api, service, clock = defaultClock }) {
     },
 
     async connect(input) {
-      if (state.status === "connecting" || state.status === "connected") {
+      if (state.status === "connecting" || state.status === "connected" || disconnecting) {
         throw new Error("A VPN connection is already active.");
       }
       const applicationPaths = validateApps(input?.mode, input?.apps);
@@ -92,69 +94,79 @@ function createVpnConnection({ api, service, clock = defaultClock }) {
       state = { status: "connecting", node: null, leaseExpiresAt: null, error: null };
 
       let remoteAuthorized = false;
-      try {
-        const identity = await service.identity();
-        const authorization = await api.authorize({
-          clientPublicKey: identity.publicKey,
-          ...(input?.location?.countryCode
-            ? { countryCode: input.location.countryCode }
-            : {}),
-          ...(input?.location?.region ? { region: input.location.region } : {}),
-        });
-        remoteAuthorized = true;
-        await service.connect({
-          generation,
-          applicationPaths,
-          authorization,
-        });
-        activeGeneration = generation;
-        state = {
-          status: "connected",
-          node: authorization.node,
-          leaseExpiresAt: authorization.lease_expires_at,
-          error: null,
-        };
-        scheduleExpiry(authorization.lease_expires_at, generation);
-        return publicState(state);
-      } catch (error) {
-        cancelLeaseTimer();
+      const work = (async () => {
         try {
-          await service.disconnect({ generation, reason: "connect_failed" });
-        } catch {}
-        if (remoteAuthorized) {
-          try { await api.disconnect(); } catch {}
+          const identity = await service.identity();
+          const authorization = await api.authorize({
+            clientPublicKey: identity.publicKey,
+            ...(input?.location?.countryCode
+              ? { countryCode: input.location.countryCode }
+              : {}),
+            ...(input?.location?.region ? { region: input.location.region } : {}),
+          });
+          remoteAuthorized = true;
+          await service.connect({
+            generation,
+            applicationPaths,
+            authorization,
+          });
+          activeGeneration = generation;
+          state = {
+            status: "connected",
+            node: authorization.node,
+            leaseExpiresAt: authorization.lease_expires_at,
+            error: null,
+          };
+          scheduleExpiry(authorization.lease_expires_at, generation);
+          return publicState(state);
+        } catch (error) {
+          cancelLeaseTimer();
+          try {
+            await service.disconnect({ generation, reason: "connect_failed" });
+          } catch {}
+          if (remoteAuthorized) {
+            try { await api.disconnect(); } catch {}
+          }
+          activeGeneration = null;
+          state = {
+            status: "error",
+            node: null,
+            leaseExpiresAt: null,
+            error: {
+              code: "VPN_CONNECT_FAILED",
+              message: error instanceof Error ? error.message : String(error),
+            },
+          };
+          throw error;
         }
-        activeGeneration = null;
-        state = {
-          status: "error",
-          node: null,
-          leaseExpiresAt: null,
-          error: {
-            code: "VPN_CONNECT_FAILED",
-            message: error instanceof Error ? error.message : String(error),
-          },
-        };
-        throw error;
-      }
+        })();
+      connecting = work;
+      try { return await work; } finally { if (connecting === work) connecting = null; }
     },
 
     async disconnect() {
-      const generation = activeGeneration;
-      const hadRemoteSession = state.status === "connected" || state.status === "connecting";
-      cancelLeaseTimer();
-      state = { ...state, status: "disconnecting", error: null };
-      let remoteError = null;
-      if (hadRemoteSession) {
-        try { await api.disconnect(); } catch (error) { remoteError = error; }
-      }
-      try {
-        await service.disconnect({ generation, reason: "user_disconnect" });
-      } finally {
-        activeGeneration = null;
-        state = { status: "idle", node: null, leaseExpiresAt: null, error: null };
-      }
-      if (remoteError) throw remoteError;
-      return publicState(state);
+      if (disconnecting) return disconnecting;
+      const work = (async () => {
+        if (connecting) { try { await connecting; } catch {} }
+        const generation = activeGeneration;
+        const hadRemoteSession = state.status === "connected" || state.status === "connecting";
+        cancelLeaseTimer();
+        state = { ...state, status: "disconnecting", error: null };
+        let remoteError = null;
+        if (hadRemoteSession) {
+          try { await api.disconnect(); } catch (error) { remoteError = error; }
+        }
+        try {
+          await service.disconnect({ generation, reason: "user_disconnect" });
+        } finally {
+          activeGeneration = null;
+          state = { status: "idle", node: null, leaseExpiresAt: null, error: null };
+        }
+        if (remoteError) throw remoteError;
+        return publicState(state);
+      })();
+      disconnecting = work;
+      try { return await work; } finally { if (disconnecting === work) disconnecting = null; }
     },
   });
 }
