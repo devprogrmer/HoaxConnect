@@ -350,8 +350,8 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
   } finally {
     await app.close();
     if (multiGroupId) await pool.query("DELETE FROM vpn_route_groups WHERE id = $1", [multiGroupId]);
-    if (multiNodeIds.length) await pool.query("DELETE FROM vpn_nodes WHERE id = ANY($1::uuid[])", [multiNodeIds]);
     if (ids.user) await pool.query("DELETE FROM users WHERE id = $1", [ids.user]);
+    if (multiNodeIds.length) await pool.query("DELETE FROM vpn_nodes WHERE id = ANY($1::uuid[])", [multiNodeIds]);
     if (ids.admin) await pool.query("DELETE FROM admin_accounts WHERE id = $1", [ids.admin]);
     if (ids.node) await pool.query("DELETE FROM vpn_nodes WHERE id = $1", [ids.node]);
     if (ids.plan) await pool.query("DELETE FROM plans WHERE id = $1", [ids.plan]);
