@@ -911,7 +911,7 @@ function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
   const canWrite = admin.role === "admin" || admin.role === "superadmin";
   async function inspect(groupId: string) {
     try {
-      setPreflight(await adminApi(`/route-groups/${groupId}/preflight`));
+      setPreflight(await adminApi<NonNullable<typeof preflight>>(`/route-groups/${groupId}/preflight`));
     } catch (error) {
       onAction({ title: "Preflight failed", description: error instanceof Error ? error.message : "Request failed.",
         endpoint: "", payload: {}, readOnly: true });
