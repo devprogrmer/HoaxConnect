@@ -1135,7 +1135,9 @@ async function listNodes() {
   const result = await pool.query(
     `SELECT n.id, n.name, n.country_code, n.region, n.city,
             n.hostname, n.public_endpoint,
-            CASE WHEN n.status = 'online' THEN 'offline'
+            CASE WHEN n.status = 'online' AND
+                      (n.last_seen_at IS NULL OR n.last_seen_at <= now() - interval '90 seconds')
+                   THEN 'offline'
                  ELSE n.status::text END AS status,
             n.capacity_peers, n.current_peers, n.enabled, n.last_seen_at,
             n.created_at, n.updated_at,
@@ -1146,7 +1148,7 @@ async function listNodes() {
   return {
     data: {
       items: result.rows,
-      online_status_source: "node_agent_not_connected",
+      online_status_source: "authenticated_agent_heartbeat",
     },
   };
 }

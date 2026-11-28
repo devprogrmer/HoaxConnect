@@ -548,6 +548,13 @@ test("route group topology edits are audited, versioned, and reject stale update
     const audit = await pool.query(
       "SELECT action FROM admin_audit_logs WHERE resource_id = $1 AND action = 'route_group.update'", [groupId]);
     assert.equal(audit.rowCount, 1);
+    await pool.query("UPDATE vpn_nodes SET status = 'online', last_seen_at = now() WHERE id = $1", [ids[1]]);
+    const fresh = await app.inject({ method: "GET", url: "/api/v1/admin/nodes", headers });
+    assert.equal(fresh.statusCode, 200, fresh.body);
+    assert.equal(fresh.json().data.items.find((node: { id: string }) => node.id === ids[1]).status, "online");
+    await pool.query("UPDATE vpn_nodes SET last_seen_at = now() - interval '2 minutes' WHERE id = $1", [ids[1]]);
+    const staleHeartbeat = await app.inject({ method: "GET", url: "/api/v1/admin/nodes", headers });
+    assert.equal(staleHeartbeat.json().data.items.find((node: { id: string }) => node.id === ids[1]).status, "offline");
   } finally {
     if (groupId) await pool.query("DELETE FROM vpn_route_groups WHERE id = $1", [groupId]);
     if (ids.length) await pool.query("DELETE FROM vpn_nodes WHERE id = ANY($1::uuid[])", [ids]);
