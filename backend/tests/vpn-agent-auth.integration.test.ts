@@ -65,6 +65,7 @@ test(
     ]);
     const app = await buildApp();
     const nodeIds: string[] = [];
+    let groupId: string | null = null;
 
     try {
       const node = await pool.query<{ id: string }>(
@@ -177,6 +178,61 @@ test(
       assert.equal(storedNode.rows[0].load_percent, heartbeat.load_percent);
       assert.ok(storedNode.rows[0].last_seen_at);
 
+      await pool.query("UPDATE vpn_nodes SET country_code = 'IR' WHERE id = $1", [nodeId]);
+      const gateway = await pool.query<{ id: string }>(
+        `INSERT INTO vpn_nodes (name, country_code, region, hostname, public_endpoint,
+           public_key, capacity_peers, tunnel_cidr, listen_port)
+         VALUES ($1, 'TR', 'test', $2, '198.51.100.30:51820',
+           $3, 100, '10.89.0.0/24', 51820) RETURNING id`,
+        [`gateway-${randomUUID()}`, `gateway-${randomUUID()}.example.test`,
+          randomBytes(32).toString("base64")],
+      );
+      nodeIds.push(gateway.rows[0]!.id);
+      const group = await pool.query<{ id: string }>(
+        "INSERT INTO vpn_route_groups(name, gateway_node_id) VALUES ($1, $2) RETURNING id",
+        [`link-${randomUUID()}`, gateway.rows[0]!.id],
+      );
+      groupId = group.rows[0]!.id;
+      await pool.query(
+        "INSERT INTO vpn_route_group_entries(group_id, entry_node_id, priority) VALUES ($1, $2, 1)",
+        [groupId, nodeId],
+      );
+      const signedPost = async (route: string, payload: unknown) => {
+        const timestamp = String(Math.floor(Date.now() / 1000));
+        const nonce = randomBytes(18).toString("base64url");
+        return app.inject({ method: "POST", url: route, payload, headers: {
+          "x-hc-node-id": nodeId,
+          "x-hc-credential-id": enrolled.credential_id,
+          "x-hc-timestamp": timestamp,
+          "x-hc-nonce": nonce,
+          "x-hc-signature": sign(null,
+            Buffer.from(canonicalRequest("POST", route, timestamp, nonce, payload)),
+            keys.privateKey).toString("base64"),
+        } });
+      };
+      const desired = await signedPost("/api/v1/vpn-agent/desired-state", {});
+      assert.equal(desired.statusCode, 200, desired.body);
+      assert.deepEqual(desired.json().data.route_group_drafts,
+        [{ group_id: groupId, config_version: "1" }]);
+      const routeKeyPayload = { group_id: groupId, config_version: "1",
+        public_key: randomBytes(32).toString("base64") };
+      const published = await signedPost("/api/v1/vpn-agent/route-group-key", routeKeyPayload);
+      assert.equal(published.statusCode, 200, published.body);
+      const saved = await pool.query(
+        "SELECT public_key, config_version::text FROM vpn_route_group_node_keys WHERE group_id = $1 AND node_id = $2",
+        [groupId, nodeId],
+      );
+      assert.equal(saved.rows[0].public_key, routeKeyPayload.public_key);
+      const changedKey = await signedPost("/api/v1/vpn-agent/route-group-key",
+        { ...routeKeyPayload, public_key: randomBytes(32).toString("base64") });
+      assert.equal(changedKey.statusCode, 409, changedKey.body);
+      await pool.query("UPDATE vpn_route_groups SET config_version = 2 WHERE id = $1", [groupId]);
+      const staleVersion = await signedPost("/api/v1/vpn-agent/route-group-key", routeKeyPayload);
+      assert.equal(staleVersion.statusCode, 409, staleVersion.body);
+      const renewed = await signedPost("/api/v1/vpn-agent/route-group-key",
+        { ...routeKeyPayload, config_version: "2" });
+      assert.equal(renewed.statusCode, 200, renewed.body);
+
       const replay = await app.inject({
         method: "POST", url: path, headers: acceptedHeaders, payload: heartbeat,
       });
@@ -223,6 +279,7 @@ test(
       assert.equal(revoked.json().error.code, "VPN_AGENT_AUTHENTICATION_FAILED");
       assert.doesNotMatch(revoked.body, /signature|private|enrollment_token/i);
     } finally {
+      if (groupId) await pool.query("DELETE FROM vpn_route_groups WHERE id = $1", [groupId]);
       if (nodeIds.length) {
         await pool.query("DELETE FROM vpn_nodes WHERE id = ANY($1::uuid[])", [nodeIds]);
       }

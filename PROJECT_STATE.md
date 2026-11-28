@@ -18,3 +18,5 @@
 - Production release and deployment remain blocked on RELEASE_CHECKLIST.md.
 
 - Option 1 tunnel orchestration: IN_PROGRESS. Added a read-only inventory preflight for route groups to detect missing/offline nodes, stale heartbeats and overlapping client CIDRs; it deliberately reports transport_ready=false. Pending per-node link addresses/key exchange, signed agent instructions, staged apply/ack, health checks and rollback. No automatic link activation or inter-node forwarding is claimed.
+
+- Route-group link keys: IN_PROGRESS. Agents now generate per-group X25519 WireGuard private keys in protected local state and publish only public keys through signed, replay-protected, version-checked node endpoints. The API rejects non-member/stale or active-group changes. The agent receives inactive group drafts; this step does not create a transport interface, assign link IPs, route packets, or activate a tunnel. Await PostgreSQL and vpn-agent CI; next implement managed inter-node interfaces, health acknowledgement and rollback.

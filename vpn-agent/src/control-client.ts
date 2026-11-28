@@ -12,7 +12,8 @@ type ControlOptions = {
   baseDelayMs?: number;
 };
 
-type DesiredState = { peers: DesiredPeer[]; revocations: unknown[]; configVersion: number };
+type DesiredState = { peers: DesiredPeer[]; revocations: unknown[]; configVersion: number;
+  routeGroupDrafts: Array<{ groupId: string; configVersion: string }> };
 
 function stableJson(value: unknown): string {
   if (value === null) return "null";
@@ -87,10 +88,20 @@ export class ControlClient {
     });
   }
 
+  async publishRouteGroupKey(groupId: string, configVersion: string, publicKey: string) {
+    return this.request<{ group_id: string; node_id: string; config_version: string }>(
+      "/api/v1/vpn-agent/route-group-key",
+      { group_id: groupId, config_version: configVersion, public_key: publicKey },
+    );
+  }
+
   async desiredState(): Promise<DesiredState> {
     const data = await this.request<any>("/api/v1/vpn-agent/desired-state", {});
     return {
       configVersion: Number(data.config_version), revocations: data.revocations ?? [],
+      routeGroupDrafts: (data.route_group_drafts ?? []).map((item: any) => ({
+        groupId: item.group_id, configVersion: item.config_version,
+      })),
       peers: (data.peers ?? []).map((peer: any) => ({
         vpnSessionId: peer.vpn_session_id, publicKey: peer.public_key,
         allowedIp: peer.allowed_ip, configVersion: Number(peer.config_version),

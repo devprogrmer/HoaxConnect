@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.js";
 import { ControlClient } from "./control-client.js";
 import { loadOrEnrollIdentity } from "./identity.js";
+import { ensureRouteLinkKey } from "./route-link-key.js";
 import { Reconciler } from "./reconciler.js";
 import { LinuxWireGuardAdapter } from "./wireguard.js";
 
@@ -29,6 +30,12 @@ async function run() {
     try {
       await reconciler.expireLeases();
       const desired = await client.desiredState();
+      for (let i = 0; i < desired.routeGroupDrafts.length; i += 4) {
+        await Promise.all(desired.routeGroupDrafts.slice(i, i + 4).map(async (draft) => {
+          const publicKey = await ensureRouteLinkKey(config.stateDir, draft.groupId);
+          await client.publishRouteGroupKey(draft.groupId, draft.configVersion, publicKey);
+        }));
+      }
       await reconciler.reconcile(desired.peers);
       const snapshot = await adapter.snapshot();
       await client.heartbeat({
