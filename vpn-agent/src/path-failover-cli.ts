@@ -48,9 +48,11 @@ async function run() {
   };
 
   // Complete both probe attempts before touching the managed endpoint route.
-  await measureBoth();
-  await replace("primary");
-  const controller = new PathFailover(replace);
+  const [initialPrimary, initialRelay] = await measureBoth();
+  const initialPath = initialPrimary.lossPercent >= 20 && initialRelay.lossPercent < 20
+    ? "relay" : "primary";
+  await replace(initialPath);
+  const controller = new PathFailover(replace, initialPath);
   let stopping = false;
   process.once("SIGTERM", () => { stopping = true; });
   process.once("SIGINT", () => { stopping = true; });
