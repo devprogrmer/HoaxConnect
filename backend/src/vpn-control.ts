@@ -287,22 +287,32 @@ export async function authorizeVpnMultiSession(
   }
   await revokeVpnSessions(client, { deviceId: auth.deviceId }, "multi_entry_reconfigured");
   const candidates = await client.query<NodeRow & { priority: number; route_group_id: string }>(
-    `SELECT n.id,n.public_endpoint,n.public_key,n.tunnel_cidr::text,
+    `WITH chosen_group AS (
+       SELECT g.id FROM vpn_route_groups g
+       WHERE g.enabled = true AND g.phase = 'active'
+         AND (SELECT count(*) FROM vpn_route_group_entries eligible
+           JOIN vpn_nodes candidate ON candidate.id = eligible.entry_node_id
+           WHERE eligible.group_id = g.id AND candidate.enabled = true
+             AND candidate.status = 'online' AND candidate.last_seen_at > now() - interval '90 seconds'
+             AND candidate.current_peers < candidate.capacity_peers
+             AND candidate.tunnel_cidr IS NOT NULL AND candidate.listen_port IS NOT NULL) >= $1
+         AND (SELECT count(*) FROM vpn_route_group_reports r WHERE r.group_id = g.id
+           AND r.config_version = g.config_version AND r.healthy = true
+           AND r.reported_at > now() - interval '90 seconds') =
+           (SELECT count(*) + 1 FROM vpn_route_group_entries members WHERE members.group_id = g.id)
+       ORDER BY g.updated_at DESC LIMIT 1
+     )
+     SELECT n.id,n.public_endpoint,n.public_key,n.tunnel_cidr::text,
        ARRAY(SELECT host(value) FROM unnest(n.dns_servers) AS value) AS dns_servers,
        n.agent_config_version::text,e.priority,g.id AS route_group_id
-     FROM vpn_route_groups g
+     FROM chosen_group chosen JOIN vpn_route_groups g ON g.id = chosen.id
      JOIN vpn_route_group_entries e ON e.group_id = g.id
      JOIN vpn_nodes n ON n.id = e.entry_node_id
-     WHERE g.enabled = true AND g.phase = 'active'
-       AND n.enabled = true AND n.status = 'online'
+     WHERE n.enabled = true AND n.status = 'online'
        AND n.last_seen_at > now() - interval '90 seconds'
        AND n.current_peers < n.capacity_peers
        AND n.tunnel_cidr IS NOT NULL AND n.listen_port IS NOT NULL
-       AND (SELECT count(*) FROM vpn_route_group_reports r WHERE r.group_id = g.id
-         AND r.config_version = g.config_version AND r.healthy = true
-         AND r.reported_at > now() - interval '90 seconds') =
-         (SELECT count(*) + 1 FROM vpn_route_group_entries members WHERE members.group_id = g.id)
-     ORDER BY g.updated_at DESC, e.priority, n.load_percent, n.current_peers
+     ORDER BY e.priority, n.load_percent, n.current_peers
      LIMIT $1 FOR UPDATE OF n SKIP LOCKED`, [input.pathCount]);
   if (candidates.rowCount !== input.pathCount ||
       new Set(candidates.rows.map((row) => row.route_group_id)).size !== 1) {
