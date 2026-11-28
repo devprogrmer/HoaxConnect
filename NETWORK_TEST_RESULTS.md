@@ -2,6 +2,6 @@
 
 Baseline integration: [GitHub Actions run 46119531878](https://github.com/devprogrmer/HoaxConnect/actions/runs/46119531878) passed. Both paths returned all five probes. The manually switched route preserved the externally observed UDP tuple 10.41.3.1:47362.
 
-Automatic scenario: scripts/test-tunnel-paths.sh pins probes to independent paths, drops direct ingress and measures time and unanswered UDP packets until both controllers use the relay. The run logs carry the measured values.
+Automatic scenario: scripts/test-tunnel-paths.sh pins probes to independent paths, drops direct ingress and measures time and unanswered UDP packets until both controllers use the relay. [GitHub Actions run 46120516259](https://github.com/devprogrmer/HoaxConnect/actions/runs/46120516259) passed all 13 VPN agent tests and the WireGuard topology test. The same socket recovered in 6,013 ms after 24 unanswered test packets. Both routes returned 5/5 probes after selection. The gateway preserved the UDP tuple 10.41.3.1:51005. This lab result is not a seamless failover result.
 
 Field test: BLOCKED. Namespace latency is not representative of the Iran–Turkey internet path.
