@@ -81,3 +81,6 @@ relay degrades and the primary is healthy, the controller returns immediately
 to the primary. The controller starts on primary and leaves the last applied
 route in place on exit. Staging must exercise restart, live return traffic,
 tunnel continuity and multiple-flow behavior before production adoption.
+
+Release checkpoints are tracked in PROJECT_STATE.md, RELEASE_CHECKLIST.md and
+TEST_MATRIX.md. Technical and field evidence goes in NETWORK_TEST_RESULTS.md.

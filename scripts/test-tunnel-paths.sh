@@ -50,8 +50,25 @@ ip -n "$entry" addr add 192.0.2.1/32 dev lo
 ip -n "$exit_node" addr add 192.0.2.2/32 dev lo
 ip -n "$relay" route add 192.0.2.1/32 via 10.41.1.1
 ip -n "$relay" route add 192.0.2.2/32 via 10.41.2.2
-ip -n "$entry" route add 192.0.2.2/32 via 10.41.0.2 src 192.0.2.1
-ip -n "$exit_node" route add 192.0.2.1/32 via 10.41.0.1 src 192.0.2.2
+# Keep the authenticated probes pinned to their own paths in both directions.
+ip -n "$entry" route add 10.41.2.2/32 via 10.41.1.2
+ip -n "$exit_node" route add 10.41.1.1/32 via 10.41.2.1
+pin_return() {
+  local ns="$1" source="$2" destination="$3" gateway="$4" device="$5" table="$6"
+  ip -n "$ns" route add "$destination/32" via "$gateway" dev "$device" table "$table"
+  ip -n "$ns" rule add priority "$table" from "$source/32" to "$destination/32" lookup "$table"
+}
+pin_return "$entry" 10.41.0.1 192.0.2.2 10.41.0.2 direct 301
+pin_return "$entry" 10.41.1.1 192.0.2.2 10.41.1.2 alternate 302
+pin_return "$exit_node" 10.41.0.2 192.0.2.1 10.41.0.1 direct 301
+pin_return "$exit_node" 10.41.2.2 192.0.2.1 10.41.2.1 alternate 302
+ip -n "$entry" rule add priority 303 to 192.0.2.2/32 lookup 303
+ip -n "$exit_node" rule add priority 303 to 192.0.2.1/32 lookup 303
+for ns in "$entry" "$exit_node"; do
+  for dev in all direct alternate; do
+    ip netns exec "$ns" sysctl -qw "net.ipv4.conf.$dev.rp_filter=0"
+  done
+done
 
 umask 077
 wg genkey >"$work/entry.key"
@@ -84,7 +101,16 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.sendto(packet + ("|%s:%d" % peer).encode(), peer)
 ' >"$work/game.log" &
 children+=("$!")
-for ready in "$work/probe.log" "$work/game.log"; do
+start_probe() {
+  local ns="$1" address="$2"
+  ip netns exec "$ns" node vpn-agent/dist/path-probe-cli.js respond "$address" 45900 >"$work/$address.log" &
+  children+=("$!")
+}
+start_probe "$entry" 10.41.0.1
+start_probe "$entry" 10.41.1.1
+start_probe "$exit_node" 10.41.0.2
+start_probe "$exit_node" 10.41.2.2
+for ready in "$work/probe.log" "$work/game.log" "$work/"10.41.*.log; do
   for _ in {1..50}; do
     [[ -s "$ready" ]] && break
     sleep .1
@@ -92,10 +118,25 @@ for ready in "$work/probe.log" "$work/game.log"; do
   [[ -s "$ready" ]]
 done
 
+ip netns exec "$entry" node vpn-agent/dist/path-failover-cli.js 192.0.2.2 303 192.0.2.1 \
+  10.41.0.2 direct 10.41.0.2 10.41.1.2 alternate 10.41.2.2 45900 >"$work/entry-path.log" &
+children+=("$!")
+ip netns exec "$exit_node" node vpn-agent/dist/path-failover-cli.js 192.0.2.1 303 192.0.2.2 \
+  10.41.0.1 direct 10.41.0.1 10.41.2.1 alternate 10.41.1.1 45900 >"$work/exit-path.log" &
+children+=("$!")
+for ready in "$work/entry-path.log" "$work/exit-path.log"; do
+  for _ in {1..75}; do
+    [[ -s "$ready" ]] && break
+    sleep .1
+  done
+  grep -q '"path":"primary"' "$ready"
+done
+
 python3 - "$entry" "$relay" "$exit_node" <<'PY'
 import json
 import subprocess
 import sys
+import time
 
 entry, relay, exit_node = sys.argv[1:]
 
@@ -119,16 +160,26 @@ client = r"""
 import json
 import socket
 import sys
+import time
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
     sock.bind(("10.42.0.1", 0))
-    sock.settimeout(5)
+    sock.settimeout(0.25)
     for line in sys.stdin:
         payload = line.strip().encode()
         sock.sendto(payload, ("10.41.3.2", 45901))
-        reply, addr = sock.recvfrom(512)
-        echoed, peer = reply.decode().split("|")
-        assert echoed == payload.decode() and addr == ("10.41.3.2", 45901)
-        print(json.dumps(peer), flush=True)
+        deadline = time.monotonic() + 0.25
+        try:
+            while True:
+                sock.settimeout(max(0.001, deadline - time.monotonic()))
+                reply, addr = sock.recvfrom(512)
+                echoed, peer = reply.decode().split("|")
+                if echoed == payload.decode() and addr == ("10.41.3.2", 45901):
+                    print(json.dumps(peer), flush=True)
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError
+        except TimeoutError:
+            print("null", flush=True)
 """
 with subprocess.Popen(["ip", "netns", "exec", entry, "python3", "-c", client],
                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as flow:
@@ -142,11 +193,22 @@ with subprocess.Popen(["ip", "netns", "exec", entry, "python3", "-c", client],
         assert direct_peer.startswith("10.41.3.1:"), direct_peer
         measure("direct")
         before = relay_received()
-        ip("-n", entry, "route", "replace", "192.0.2.2/32", "via", "10.41.1.2", "src", "192.0.2.1")
-        ip("-n", exit_node, "route", "replace", "192.0.2.1/32", "via", "10.41.2.1", "src", "192.0.2.2")
-        # Remove the direct link as a possible fallback.
-        ip("-n", entry, "link", "set", "direct", "down")
-        relay_peer = round_trip("relay")
+        # Drop direct ingress without removing the independent probe routes.
+        for ns in (entry, exit_node):
+            ip("netns", "exec", ns, "iptables", "-I", "INPUT", "-i", "direct", "-j", "DROP")
+        started = time.monotonic()
+        missed = 0
+        for index in range(60):
+            relay_peer = round_trip(f"relay-{index}")
+            if relay_peer is not None:
+                break
+            missed += 1
+        else:
+            raise AssertionError("UDP flow did not recover")
+        print(json.dumps({"failover_ms": round(1000 * (time.monotonic() - started)),
+                          "unanswered_flow_packets": missed}), flush=True)
+        for ns in (entry, exit_node):
+            assert "dev alternate" in ip("-n", ns, "route", "show", "table", "303")
         measure("relay")
         after = relay_received()
         assert after["entry0"] > before["entry0"] and after["exit0"] > before["exit0"]
