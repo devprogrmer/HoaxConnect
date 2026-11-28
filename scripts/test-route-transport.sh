@@ -29,10 +29,10 @@ ip link set hcc1 netns hcre; ip link set hcc2 netns hcrc
 ip -n hcre link set hcc1 name hcx0; ip -n hcrc link set hcc2 name eth0
 ip -n hcre addr add 10.143.0.1/24 dev hcx0
 ip -n hcrc addr add 10.143.0.2/24 dev eth0
-ip -n hcrc route add default via 10.143.0.1
 for name in "${ns[@]}"; do
   for dev in $(ip -n "$name" -o link show | awk -F': ' '{print $2}' | cut -d@ -f1); do ip -n "$name" link set "$dev" up; done
 done
+ip -n hcrc route add default via 10.143.0.1
 ip netns exec hcre sysctl -qw net.ipv4.ip_forward=1
 ip netns exec hcrg sysctl -qw net.ipv4.ip_forward=1
 for name in hcre hcrg; do
