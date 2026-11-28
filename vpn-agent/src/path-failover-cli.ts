@@ -36,7 +36,7 @@ async function run() {
     console.log(JSON.stringify({ event: "path_selected", path, endpoint }));
   };
   const sample = async (destinationAddress: string) => {
-    const samples = await measurePath({ sourceAddress: source, destinationAddress, destinationPort: port, key });
+    const samples = await measurePath({ sourceAddress: source, destinationAddress, destinationPort: port, key, count: 3, timeoutMs: 150 });
     return { lossPercent: 100 * samples.filter((value) => value === null).length / samples.length };
   };
 
@@ -62,7 +62,7 @@ async function run() {
     } catch (error) {
       console.error(error instanceof Error ? error.message : "Path failover round failed");
     }
-    if (!stopping) await delay(500);
+    if (!stopping) await delay(100);
   }
 }
 
