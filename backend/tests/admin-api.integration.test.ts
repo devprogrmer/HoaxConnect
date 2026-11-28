@@ -558,6 +558,20 @@ test("route group topology edits are audited, versioned, and reject stale update
     assert.equal(ready.statusCode, 200, ready.body);
     assert.equal(ready.json().data.inventory_ready, true);
     assert.equal(ready.json().data.transport_ready, false);
+    assert.equal(ready.json().data.key_exchange_ready, false);
+    assert.ok(ready.json().data.findings.some((item: { code: string }) => item.code === "ROUTE_KEY_MISSING"));
+    for (const id of ids) {
+      await pool.query(
+        `INSERT INTO vpn_route_group_node_keys(group_id, node_id, config_version, public_key)
+         VALUES ($1, $2, 2, $3)`,
+        [groupId, id, randomBytes(32).toString("base64")],
+      );
+    }
+    const keysReady = await app.inject({ method: "GET",
+      url: `/api/v1/admin/route-groups/${groupId}/preflight`,
+      headers: requestHeaders({ cookie: operator.cookie }) });
+    assert.equal(keysReady.json().data.key_exchange_ready, true);
+    assert.equal(keysReady.json().data.transport_ready, false);
     await pool.query("UPDATE vpn_nodes SET tunnel_cidr = '10.141.0.0/24' WHERE id = $1", [ids[2]]);
     const overlap = await app.inject({ method: "GET",
       url: `/api/v1/admin/route-groups/${groupId}/preflight`,

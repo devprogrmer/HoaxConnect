@@ -1150,13 +1150,25 @@ async function preflightRouteGroup(request: FastifyRequest) {
             tunnel_cidr::text AS tunnel_cidr, listen_port
      FROM vpn_nodes WHERE id = ANY($1::uuid[])`, [ids],
   );
+  const inventory = inspectRouteInventory({
+    gateway_node_id: route.gateway_node_id,
+    entry_node_ids: route.entry_node_ids,
+    nodes: nodes.rows,
+  });
+  const keys = await pool.query<{ node_id: string; public_key: string }>(
+    `SELECT node_id, public_key FROM vpn_route_group_node_keys
+     WHERE group_id = $1 AND config_version = $2::bigint`, [groupId, route.config_version],
+  );
+  const publicKeys = new Map(keys.rows.map((row) => [row.node_id, row.public_key]));
+  const missing = ids.filter((id) => !publicKeys.has(id));
+  const duplicate = new Set(publicKeys.values()).size !== publicKeys.size;
   return { data: {
     group_id: groupId, config_version: route.config_version,
-    ...inspectRouteInventory({
-      gateway_node_id: route.gateway_node_id,
-      entry_node_ids: route.entry_node_ids,
-      nodes: nodes.rows,
-    }),
+    ...inventory,
+    key_exchange_ready: missing.length === 0 && !duplicate,
+    findings: [...inventory.findings,
+      ...missing.map((node_id) => ({ node_id, code: "ROUTE_KEY_MISSING" })),
+      ...(duplicate ? [{ node_id: groupId, code: "DUPLICATE_ROUTE_KEY" }] : [])],
   } };
 }
 

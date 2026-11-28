@@ -907,7 +907,7 @@ function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
   const [editing, setEditing] = useState<RouteGroupRecord | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [preflight, setPreflight] = useState<{ group_id: string; inventory_ready: boolean;
-    transport_ready: boolean; findings: Array<{ node_id: string; code: string }> } | null>(null);
+    key_exchange_ready: boolean; transport_ready: boolean; findings: Array<{ node_id: string; code: string }> } | null>(null);
   const canWrite = admin.role === "admin" || admin.role === "superadmin";
   async function inspect(groupId: string) {
     try {
@@ -935,7 +935,8 @@ function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
     {preflight && <section className="section-panel">
       <h2>Preflight inventory</h2>
       <p>{preflight.inventory_ready ? "Node inventory is ready for transport planning." : "Node inventory needs attention."}</p>
-      <p>Transport activation is unavailable until per-node link configuration, key exchange and rollback are implemented.</p>
+      <p>{preflight.key_exchange_ready ? "Each member has published a route key for the current topology version." : "Route key exchange is incomplete."}</p>
+      <p>Transport activation remains unavailable until per-node link addresses, forwarding, health checks and rollback are implemented.</p>
       {preflight.findings.map((item, index) => <p key={index}><code>{item.node_id}</code>: {item.code}</p>)}
     </section>}
     {editing !== undefined && (nodes.data ? <RouteGroupDialog group={editing} nodes={nodes.data.items} busy={busy} onClose={() => setEditing(undefined)} onSave={save} /> : <ErrorNotice message={nodes.error || "Loading nodes…"} />)}
