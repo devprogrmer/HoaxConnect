@@ -906,7 +906,17 @@ function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
   const nodes = useResource<{ items: NodeRecord[] }>("/nodes", refresh);
   const [editing, setEditing] = useState<RouteGroupRecord | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const [preflight, setPreflight] = useState<{ group_id: string; inventory_ready: boolean;
+    transport_ready: boolean; findings: Array<{ node_id: string; code: string }> } | null>(null);
   const canWrite = admin.role === "admin" || admin.role === "superadmin";
+  async function inspect(groupId: string) {
+    try {
+      setPreflight(await adminApi(`/route-groups/${groupId}/preflight`));
+    } catch (error) {
+      onAction({ title: "Preflight failed", description: error instanceof Error ? error.message : "Request failed.",
+        endpoint: "", payload: {}, readOnly: true });
+    }
+  }
   async function save(payload: Record<string, unknown>) {
     setBusy(true);
     try {
@@ -921,7 +931,13 @@ function RouteGroupsPage({ refresh, admin, onAction, onRefresh }: {
   }
   return <>
     <PageHeading eyebrow="NETWORK / TOPOLOGY" title="Route groups" description="Inventory of Iran entries and Turkey gateways. Activation and node configuration are still under development." action={canWrite ? <button className="primary-button" onClick={() => setEditing(null)}><Plus size={16} /> Add group</button> : undefined} />
-    <section className="section-panel table-panel">{groups.error ? <ErrorNotice message={groups.error} /> : groups.loading && !groups.data ? <LoadingLine /> : groups.data?.items.length ? <DataTable headers={["Group", "Turkey gateway", "Iran entries (priority)", "State", "Version", ""]}>{groups.data.items.map((group) => <tr key={group.id}><td><strong>{group.name}</strong></td><td>{nodes.data?.items.find((node) => node.id === group.gateway_node_id)?.name ?? group.gateway_node_id}</td><td>{group.entry_node_ids.map((id) => nodes.data?.items.find((node) => node.id === id)?.name ?? id).join(" → ")}</td><td><StatusBadge value={group.enabled ? "enabled" : "inactive"} /></td><td>{group.config_version}</td><td>{canWrite && <button className="text-button" onClick={() => setEditing(group)}>Edit</button>}</td></tr>)}</DataTable> : <EmptyState title="No route groups" detail="Register an Iran entry and a Turkey gateway before creating a topology." />}</section>
+    <section className="section-panel table-panel">{groups.error ? <ErrorNotice message={groups.error} /> : groups.loading && !groups.data ? <LoadingLine /> : groups.data?.items.length ? <DataTable headers={["Group", "Turkey gateway", "Iran entries (priority)", "State", "Version", ""]}>{groups.data.items.map((group) => <tr key={group.id}><td><strong>{group.name}</strong></td><td>{nodes.data?.items.find((node) => node.id === group.gateway_node_id)?.name ?? group.gateway_node_id}</td><td>{group.entry_node_ids.map((id) => nodes.data?.items.find((node) => node.id === id)?.name ?? id).join(" → ")}</td><td><StatusBadge value={group.enabled ? "enabled" : "inactive"} /></td><td>{group.config_version}</td><td><button className="text-button" onClick={() => inspect(group.id)}>Check inventory</button>{canWrite && <button className="text-button" onClick={() => setEditing(group)}>Edit</button>}</td></tr>)}</DataTable> : <EmptyState title="No route groups" detail="Register an Iran entry and a Turkey gateway before creating a topology." />}</section>
+    {preflight && <section className="section-panel">
+      <h2>Preflight inventory</h2>
+      <p>{preflight.inventory_ready ? "Node inventory is ready for transport planning." : "Node inventory needs attention."}</p>
+      <p>Transport activation is unavailable until per-node link configuration, key exchange and rollback are implemented.</p>
+      {preflight.findings.map((item, index) => <p key={index}><code>{item.node_id}</code>: {item.code}</p>)}
+    </section>}
     {editing !== undefined && (nodes.data ? <RouteGroupDialog group={editing} nodes={nodes.data.items} busy={busy} onClose={() => setEditing(undefined)} onSave={save} /> : <ErrorNotice message={nodes.error || "Loading nodes…"} />)}
   </>;
 }

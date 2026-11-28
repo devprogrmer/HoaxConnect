@@ -539,6 +539,32 @@ test("route group topology edits are audited, versioned, and reject stale update
     assert.equal(changed.statusCode, 200, changed.body);
     assert.equal(changed.json().data.config_version, "2");
     assert.deepEqual(changed.json().data.entry_node_ids, [ids[2], ids[1]]);
+    const blocked = await app.inject({ method: "GET",
+      url: `/api/v1/admin/route-groups/${groupId}/preflight`,
+      headers: requestHeaders({ cookie: operator.cookie }) });
+    assert.equal(blocked.statusCode, 200, blocked.body);
+    assert.equal(blocked.json().data.inventory_ready, false);
+    assert.equal(blocked.json().data.transport_ready, false);
+    for (const [index, id] of ids.entries()) {
+      await pool.query(
+        `UPDATE vpn_nodes SET enabled = true, status = 'online', last_seen_at = now(),
+               listen_port = 51820, tunnel_cidr = $2::cidr WHERE id = $1`,
+        [id, `10.14${index}.0.0/24`],
+      );
+    }
+    const ready = await app.inject({ method: "GET",
+      url: `/api/v1/admin/route-groups/${groupId}/preflight`,
+      headers: requestHeaders({ cookie: operator.cookie }) });
+    assert.equal(ready.statusCode, 200, ready.body);
+    assert.equal(ready.json().data.inventory_ready, true);
+    assert.equal(ready.json().data.transport_ready, false);
+    await pool.query("UPDATE vpn_nodes SET tunnel_cidr = '10.141.0.0/24' WHERE id = $1", [ids[2]]);
+    const overlap = await app.inject({ method: "GET",
+      url: `/api/v1/admin/route-groups/${groupId}/preflight`,
+      headers: requestHeaders({ cookie: operator.cookie }) });
+    assert.equal(overlap.json().data.inventory_ready, false);
+    assert.ok(overlap.json().data.findings.some((item: { code: string }) => item.code === "CLIENT_CIDR_OVERLAP"));
+
     const stale = await app.inject({ method: "PATCH", url: `/api/v1/admin/route-groups/${groupId}`,
       headers, payload: update });
     assert.equal(stale.statusCode, 409, stale.body);

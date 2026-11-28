@@ -24,6 +24,7 @@ import {
 } from "./admin-security.js";
 import { hashPassword, verifyPassword } from "./security.js";
 import { revokeVpnSessions } from "./vpn-control.js";
+import { inspectRouteInventory, type InventoryNode } from "./route-group-preflight.js";
 
 const ADMIN_SESSION_SECONDS = 8 * 60 * 60;
 const ADMIN_COOKIE_NAME = "hc_admin_session";
@@ -1129,6 +1130,34 @@ async function updateRouteGroup(request: FastifyRequest, admin: AdminContext) {
       }
     });
   return { data };
+}
+
+async function preflightRouteGroup(request: FastifyRequest) {
+  const groupId = uuidSchema.parse((request.params as { groupId: string }).groupId);
+  const group = await pool.query<{ gateway_node_id: string; enabled: boolean; config_version: string; entry_node_ids: string[] }>(
+    `SELECT g.gateway_node_id, g.enabled, g.config_version::text,
+            array_agg(e.entry_node_id ORDER BY e.priority) AS entry_node_ids
+     FROM vpn_route_groups g
+     JOIN vpn_route_group_entries e ON e.group_id = g.id
+     WHERE g.id = $1 GROUP BY g.id`, [groupId],
+  );
+  const route = group.rows[0];
+  if (!route) throw notFound("Route group");
+  const ids = [route.gateway_node_id, ...route.entry_node_ids];
+  const nodes = await pool.query<InventoryNode>(
+    `SELECT id, country_code, status::text AS status, enabled,
+            last_seen_at, public_endpoint, public_key,
+            tunnel_cidr::text AS tunnel_cidr, listen_port
+     FROM vpn_nodes WHERE id = ANY($1::uuid[])`, [ids],
+  );
+  return { data: {
+    group_id: groupId, config_version: route.config_version,
+    ...inspectRouteInventory({
+      gateway_node_id: route.gateway_node_id,
+      entry_node_ids: route.entry_node_ids,
+      nodes: nodes.rows,
+    }),
+  } };
 }
 
 async function listNodes() {
@@ -2430,6 +2459,11 @@ export async function registerAdminRoutes(
   app.get(
     "/api/v1/admin/route-groups",
     adminHandler("nodes.read", listRouteGroups),
+  );
+
+  app.get(
+    "/api/v1/admin/route-groups/:groupId/preflight",
+    adminHandler("nodes.read", preflightRouteGroup),
   );
 
   app.post(

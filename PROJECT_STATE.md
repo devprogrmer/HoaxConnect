@@ -16,3 +16,5 @@
 - Turkey staging VPS is now available according to operator. Exact connection details and a second independent Iran entry plus Windows client field access remain needed for the full multi-entry field gate. No field traffic or game continuity has been verified.
 - Next: implement make-before-break packet duplication to reduce interruption further. Validate the same scenarios on field staging when it is available, then implement client-side multi-entry transport.
 - Production release and deployment remain blocked on RELEASE_CHECKLIST.md.
+
+- Option 1 tunnel orchestration: IN_PROGRESS. Added a read-only inventory preflight for route groups to detect missing/offline nodes, stale heartbeats and overlapping client CIDRs; it deliberately reports transport_ready=false. Pending per-node link addresses/key exchange, signed agent instructions, staged apply/ack, health checks and rollback. No automatic link activation or inter-node forwarding is claimed.
