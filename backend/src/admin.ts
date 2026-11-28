@@ -1012,6 +1012,69 @@ const nodeCreateSchema = z.object({
   reason: reasonSchema,
 });
 
+const routeGroupSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  gateway_node_id: uuidSchema,
+  entry_node_ids: z.array(uuidSchema).min(1).max(20),
+  reason: reasonSchema,
+}).strict().refine((input) => new Set(input.entry_node_ids).size === input.entry_node_ids.length, {
+  message: "Entry nodes must be unique.",
+});
+
+async function listRouteGroups() {
+  const groups = await pool.query(
+    `SELECT g.id, g.name, g.gateway_node_id, g.enabled, g.config_version::text,
+            g.created_at, g.updated_at,
+            COALESCE(array_agg(e.entry_node_id ORDER BY e.priority)
+              FILTER (WHERE e.entry_node_id IS NOT NULL), '{}') AS entry_node_ids
+     FROM vpn_route_groups g
+     LEFT JOIN vpn_route_group_entries e ON e.group_id = g.id
+     GROUP BY g.id ORDER BY g.name`,
+  );
+  return { data: { items: groups.rows } };
+}
+
+async function createRouteGroup(request: FastifyRequest, admin: AdminContext) {
+  const input = routeGroupSchema.parse(request.body);
+  const groupId = randomUUID();
+  const data = await auditedMutation(request, admin, "route_group.create",
+    "vpn_route_group", groupId, input.reason, async (client) => {
+      const nodes = await client.query<{ id: string; country_code: string }>(
+        `SELECT id, country_code FROM vpn_nodes
+         WHERE id = ANY($1::uuid[]) AND status <> 'disabled'
+         FOR SHARE`,
+        [[input.gateway_node_id, ...input.entry_node_ids]],
+      );
+      const byId = new Map(nodes.rows.map((node) => [node.id, node.country_code]));
+      if (byId.get(input.gateway_node_id) !== "TR" ||
+          input.entry_node_ids.some((id) => byId.get(id) !== "IR")) {
+        throw conflict("Select one Turkey gateway and active Iran entry nodes.");
+      }
+      let group;
+      try {
+        group = await client.query(
+          `INSERT INTO vpn_route_groups(id, name, gateway_node_id)
+           VALUES ($1, $2, $3) RETURNING id, name, gateway_node_id, enabled, config_version::text`,
+          [groupId, input.name, input.gateway_node_id],
+        );
+        for (const [index, nodeId] of input.entry_node_ids.entries()) {
+          await client.query(
+            `INSERT INTO vpn_route_group_entries(group_id, entry_node_id, priority)
+             VALUES ($1, $2, $3)`,
+            [groupId, nodeId, index + 1],
+          );
+        }
+      } catch (error) {
+        if ((error as { code?: string }).code === "23505") {
+          throw conflict("A route group with this name already exists.");
+        }
+        throw error;
+      }
+      return { ...group.rows[0], entry_node_ids: input.entry_node_ids };
+    });
+  return { data };
+}
+
 async function listNodes() {
   const result = await pool.query(
     `SELECT n.id, n.name, n.country_code, n.region, n.city,
@@ -2304,6 +2367,20 @@ export async function registerAdminRoutes(
   app.get(
     "/api/v1/admin/payments",
     adminHandler("payments.read", listPayments),
+  );
+
+  app.get(
+    "/api/v1/admin/route-groups",
+    adminHandler("nodes.read", listRouteGroups),
+  );
+
+  app.post(
+    "/api/v1/admin/route-groups",
+    adminHandler(
+      "nodes.write",
+      async (request, _reply, admin) => createRouteGroup(request, admin),
+      true,
+    ),
   );
 
   app.get(
