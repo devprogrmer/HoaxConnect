@@ -6,7 +6,7 @@ if (( EUID != 0 )); then
   echo "Run as root on a disposable Linux runner" >&2
   exit 1
 fi
-for command in ip wg iptables python3 node; do
+for command in ip wg iptables python3 node ping; do
   command -v "$command" >/dev/null
 done
 
@@ -250,3 +250,28 @@ with subprocess.Popen(["ip", "netns", "exec", entry, "python3", "-c", client],
         flow.stdin.close()
         flow.wait(timeout=6)
 PY
+
+# Restart both route controllers while the primary path is unavailable.
+for ns in "$entry" "$exit_node"; do
+  ip netns exec "$ns" iptables -I INPUT -i direct -j DROP
+done
+kill "${children[${#children[@]}-2]}" "${children[${#children[@]}-1]}"
+ip netns exec "$entry" node vpn-agent/dist/path-failover-cli.js 192.0.2.2 303 192.0.2.1 \
+  10.41.0.2 direct 10.41.0.2 10.41.1.2 alternate 10.41.2.2 45900 >"$work/entry-restart.log" &
+children+=("$!")
+ip netns exec "$exit_node" node vpn-agent/dist/path-failover-cli.js 192.0.2.1 303 192.0.2.2 \
+  10.41.0.1 direct 10.41.0.1 10.41.2.1 alternate 10.41.1.1 45900 >"$work/exit-restart.log" &
+children+=("$!")
+for ready in "$work/entry-restart.log" "$work/exit-restart.log"; do
+  for _ in {1..50}; do
+    [[ -s "$ready" ]] && break
+    sleep .1
+  done
+  grep -q '"path":"relay"' "$ready"
+  if grep -q '"path":"primary"' "$ready"; then
+    echo "Restart selected the impaired primary path" >&2
+    exit 1
+  fi
+done
+ip netns exec "$entry" ping -c 1 -W 2 10.42.0.2 >/dev/null
+echo 'PATH_RESTART_ON_RELAY_OK'
