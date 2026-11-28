@@ -17,3 +17,4 @@
 - Production release and deployment remain blocked on RELEASE_CHECKLIST.md.
 
 - Option 1 status: COMPLETE for implementation and automated integration verification. Field validation remains a release gate and is not represented as completed.
+- Option 2 Windows multi-entry: COMPLETE for implementation and automated integration verification. Backend atomically provisions 2–5 Iran entry sessions from one healthy active Route Group under one logical connection; Windows keeps all WireGuard endpoints warm and uses continuous URL tests to move selected application flows to the best surviving entry. Backend route-groups run 46176519905 and Windows run 46176519815 passed, including PostgreSQL integration, Electron tests, pinned-engine configuration validation, installer verification, installed-service smoke test and update delta. Real-host validation remains a release gate.
