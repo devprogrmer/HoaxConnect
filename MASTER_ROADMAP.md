@@ -32,3 +32,52 @@ The route-quality module covers sample aggregation and fresh eligible-node ranki
 - Field sessions for supported games and anti-cheat compatibility. A passing CI installer check does not establish live traffic isolation or game compatibility.
 
 For each release claim record the commit, CI run, test environment, pass/fail evidence and any unresolved issue. Compare performance with matched destinations and repeated samples. Keep HoaxNet and AntiMage outside the deployment scope.
+
+## Iran-to-Turkey transport milestone
+
+Use independent Iranian paths and one Turkish egress. The first scenario
+keeps the client on Iran 1 and compares its direct path to Turkey with a
+path relayed by Iran 2. A later client-side failover scenario covers loss of
+Iran 1 itself. Keep NAT in Turkey and verify the public IP and NAT port
+remain stable across changes to the transit path.
+
+The VPN agent provides a standalone authenticated UDP probe for staging.
+After building the agent, run the responder on an explicit private tunnel
+address on the Turkish host and run the sampler from each Iranian path:
+
+```sh
+HC_PATH_PROBE_KEY_FILE=/path/to/probe.key node vpn-agent/dist/path-probe-cli.js respond TURKEY_TUNNEL_IP 45900
+HC_PATH_PROBE_KEY_FILE=/path/to/probe.key node vpn-agent/dist/path-probe-cli.js measure IRAN_TUNNEL_IP 45900 TURKEY_TUNNEL_IP
+```
+
+Use the same dedicated 32-byte binary key at both ends. Configure and verify
+the route for each source/destination pair before measuring. Binding a source
+IP does not by itself force a Linux routing table or a symmetric return
+path. Samples are round-trip milliseconds, with null for a missing reply.
+No route changes are made by the probe. Use repeated samples on each path
+before introducing automatic failover, then test a live UDP flow while
+impairing only the direct path.
+
+The staging path controller replaces one peer endpoint host route in a dedicated
+Linux policy table. It keeps the endpoint address and source address stable.
+Both probe paths must already have independent, fixed routes distinct from
+the managed endpoint route. Run a controller on each end for bidirectional
+switching. Configure forwarding on the relay and retain the existing WireGuard
+session and egress NAT on the Turkish gateway. Establish the policy rules
+before starting the controller; no default route or policy rule is installed
+by the controller.
+
+```sh
+HC_PATH_PROBE_KEY_FILE=/path/to/probe.key node vpn-agent/dist/path-failover-cli.js \
+  PEER_ENDPOINT_IP TABLE_ID LOCAL_STABLE_IP \
+  PRIMARY_NEXT_HOP PRIMARY_INTERFACE PRIMARY_PROBE_IP \
+  RELAY_NEXT_HOP RELAY_INTERFACE RELAY_PROBE_IP PROBE_PORT
+```
+
+Two consecutive rounds with at least 20% primary probe loss trigger a switch
+if the relay is healthy in the latest round. Five healthy primary rounds
+permit failback. Loss on both paths retains the current route. If the active
+relay degrades and the primary is healthy, the controller returns immediately
+to the primary. The controller starts on primary and leaves the last applied
+route in place on exit. Staging must exercise restart, live return traffic,
+tunnel continuity and multiple-flow behavior before production adoption.
