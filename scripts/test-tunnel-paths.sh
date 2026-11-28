@@ -93,8 +93,19 @@ ip netns exec "$exit_node" node vpn-agent/dist/path-probe-cli.js respond 10.42.0
 children+=("$!")
 ip netns exec "$game" python3 -u -c '
 import socket
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+from threading import Thread
+
+def tcp_echo(listener):
+    conn, peer = listener.accept()
+    with conn, conn.makefile("rb") as incoming:
+        for packet in incoming:
+            conn.sendall(packet.rstrip(b"\n") + ("|%s:%d\n" % peer).encode())
+
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock, socket.socket() as listener:
     sock.bind(("10.41.3.2", 45901))
+    listener.bind(("10.41.3.2", 45901))
+    listener.listen()
+    Thread(target=tcp_echo, args=(listener,), daemon=True).start()
     print("ready")
     while True:
         packet, peer = sock.recvfrom(512)
@@ -161,11 +172,18 @@ import json
 import socket
 import sys
 import time
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock, socket.create_connection(
+        ("10.41.3.2", 45901), timeout=5, source_address=("10.42.0.1", 0)) as tcp, tcp.makefile("rb") as incoming:
     sock.bind(("10.42.0.1", 0))
     sock.settimeout(0.25)
     for line in sys.stdin:
         payload = line.strip().encode()
+        if payload.startswith(b"tcp-"):
+            tcp.sendall(payload + b"\n")
+            echoed, peer = incoming.readline().decode().strip().split("|")
+            assert echoed == payload.decode()
+            print(json.dumps(peer), flush=True)
+            continue
         sock.sendto(payload, ("10.41.3.2", 45901))
         deadline = time.monotonic() + 0.25
         try:
@@ -191,6 +209,8 @@ with subprocess.Popen(["ip", "netns", "exec", entry, "python3", "-c", client],
     try:
         direct_peer = round_trip("direct")
         assert direct_peer.startswith("10.41.3.1:"), direct_peer
+        tcp_peer = round_trip("tcp-direct")
+        assert tcp_peer.startswith("10.41.3.1:"), tcp_peer
         measure("direct")
         before = relay_received()
         # Drop direct ingress without removing the independent probe routes.
@@ -213,7 +233,19 @@ with subprocess.Popen(["ip", "netns", "exec", entry, "python3", "-c", client],
         after = relay_received()
         assert after["entry0"] > before["entry0"] and after["exit0"] > before["exit0"]
         assert relay_peer == direct_peer, (direct_peer, relay_peer)
-        print("TUNNEL_PATHS_E2E_OK stable_egress=" + relay_peer, flush=True)
+        assert round_trip("tcp-relay") == tcp_peer
+        for ns in (entry, exit_node):
+            ip("netns", "exec", ns, "iptables", "-D", "INPUT", "-i", "direct", "-j", "DROP")
+        deadline = time.monotonic() + 12
+        while not all("dev direct" in ip("-n", ns, "route", "show", "table", "303")
+                      for ns in (entry, exit_node)):
+            assert time.monotonic() < deadline, "Both controllers must fail back"
+            assert round_trip("udp-recovery") in (None, direct_peer)
+            time.sleep(0.1)
+        assert round_trip("udp-restored") == direct_peer
+        assert round_trip("tcp-restored") == tcp_peer
+        measure("restored")
+        print("TUNNEL_PATHS_E2E_OK stable_egress=" + relay_peer + " stable_tcp=" + tcp_peer, flush=True)
     finally:
         flow.stdin.close()
         flow.wait(timeout=6)
