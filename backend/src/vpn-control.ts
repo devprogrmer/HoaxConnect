@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 
 import { ApiError } from "./errors.js";
@@ -6,6 +7,12 @@ export type VpnAuthorization = {
   vpn_session_id: string;
   node: { id: string; endpoint: string; public_key: string };
   client: { assigned_ip: string; dns_servers: string[] };
+  lease_expires_at: string;
+};
+
+export type VpnMultiAuthorization = {
+  connection_group_id: string;
+  paths: VpnAuthorization[];
   lease_expires_at: string;
 };
 
@@ -241,5 +248,95 @@ export async function authorizeVpnSession(
   return result({ ...selected, vpn_session_id: session.rows[0]!.id,
     assigned_ip: address.rows[0].assigned_ip,
     lease_expires_at: session.rows[0]!.lease_expires_at });
+}
+
+export async function authorizeVpnMultiSession(
+  client: PoolClient,
+  auth: AuthIdentity,
+  input: { clientPublicKey: string; pathCount: number },
+): Promise<VpnMultiAuthorization> {
+  const account = await client.query(`SELECT id FROM users
+    WHERE id = $1 AND status = 'active' AND deleted_at IS NULL FOR UPDATE`, [auth.userId]);
+  if (!account.rowCount) throw new ApiError(403, "ACCOUNT_UNAVAILABLE", "The account is not available for VPN access.");
+  const device = await client.query(`SELECT id FROM devices WHERE id = $1 AND user_id = $2
+    AND revoked_at IS NULL AND banned_at IS NULL FOR UPDATE`, [auth.deviceId, auth.userId]);
+  if (!device.rowCount) throw new ApiError(401, "SESSION_INVALID", "The device is no longer authorized.");
+  const subscriptions = await client.query<{
+    id: string; starts_at: Date | null; ends_at: Date | null; traffic_quota_bytes: string;
+    used_rx_bytes: string; used_tx_bytes: string; concurrent_session_limit: number;
+  }>(`SELECT id,starts_at,ends_at,traffic_quota_bytes::text,used_rx_bytes::text,
+      used_tx_bytes::text,concurrent_session_limit FROM subscriptions
+    WHERE user_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [auth.userId]);
+  const entitlement = subscriptions.rows[0];
+  if (!entitlement) throw new ApiError(403, "VPN_SUBSCRIPTION_REQUIRED", "An active subscription is required.");
+  const now = Date.now();
+  if ((entitlement.starts_at && entitlement.starts_at.getTime() > now) ||
+      (entitlement.ends_at && entitlement.ends_at.getTime() <= now)) {
+    throw new ApiError(403, "VPN_SUBSCRIPTION_EXPIRED", "The subscription is not currently valid.");
+  }
+  if (BigInt(entitlement.used_rx_bytes) + BigInt(entitlement.used_tx_bytes) >=
+      BigInt(entitlement.traffic_quota_bytes)) {
+    throw new ApiError(403, "VPN_QUOTA_EXHAUSTED", "The subscription traffic quota is exhausted.");
+  }
+  const activeConnections = await client.query<{ count: number }>(
+    `SELECT count(DISTINCT COALESCE(connection_group_id, id))::int AS count
+     FROM vpn_sessions WHERE subscription_id = $1 AND status IN ${liveStatuses}
+       AND lease_expires_at > now() AND device_id <> $2`, [entitlement.id, auth.deviceId]);
+  if ((activeConnections.rows[0]?.count ?? 0) >= entitlement.concurrent_session_limit) {
+    throw new ApiError(409, "VPN_CONCURRENT_LIMIT", "The concurrent VPN session limit is reached.");
+  }
+  await revokeVpnSessions(client, { deviceId: auth.deviceId }, "multi_entry_reconfigured");
+  const candidates = await client.query<NodeRow & { priority: number; route_group_id: string }>(
+    `SELECT n.id,n.public_endpoint,n.public_key,n.tunnel_cidr::text,
+       ARRAY(SELECT host(value) FROM unnest(n.dns_servers) AS value) AS dns_servers,
+       n.agent_config_version::text,e.priority,g.id AS route_group_id
+     FROM vpn_route_groups g
+     JOIN vpn_route_group_entries e ON e.group_id = g.id
+     JOIN vpn_nodes n ON n.id = e.entry_node_id
+     WHERE g.enabled = true AND g.phase = 'active'
+       AND n.enabled = true AND n.status = 'online'
+       AND n.last_seen_at > now() - interval '90 seconds'
+       AND n.current_peers < n.capacity_peers
+       AND n.tunnel_cidr IS NOT NULL AND n.listen_port IS NOT NULL
+       AND (SELECT count(*) FROM vpn_route_group_reports r WHERE r.group_id = g.id
+         AND r.config_version = g.config_version AND r.healthy = true
+         AND r.reported_at > now() - interval '90 seconds') =
+         (SELECT count(*) + 1 FROM vpn_route_group_entries members WHERE members.group_id = g.id)
+     ORDER BY g.updated_at DESC, e.priority, n.load_percent, n.current_peers
+     LIMIT $1 FOR UPDATE OF n SKIP LOCKED`, [input.pathCount]);
+  if (candidates.rowCount !== input.pathCount ||
+      new Set(candidates.rows.map((row) => row.route_group_id)).size !== 1) {
+    throw new ApiError(503, "VPN_MULTI_ENTRY_UNAVAILABLE",
+      "The requested number of healthy Iran entry paths is not available in one active route group.");
+  }
+  const connectionGroupId = randomUUID();
+  const authorizations: VpnAuthorization[] = [];
+  for (const selected of candidates.rows) {
+    const address = await client.query<{ assigned_ip: string }>(
+      `SELECT host(network($1::cidr)::inet + candidate.host_index::bigint) AS assigned_ip
+       FROM generate_series(2::bigint,
+         ((1::bigint << (32 - masklen($1::cidr))) - 2)::bigint) AS candidate(host_index)
+       WHERE NOT EXISTS (SELECT 1 FROM vpn_sessions s WHERE s.vpn_node_id = $2
+         AND s.assigned_ip = network($1::cidr)::inet + candidate.host_index::bigint
+         AND s.status IN ${liveStatuses} AND s.lease_expires_at > now())
+       ORDER BY candidate.host_index LIMIT 1`, [selected.tunnel_cidr, selected.id]);
+    if (!address.rows[0]) throw new ApiError(503, "VPN_ADDRESS_POOL_EXHAUSTED", "A VPN node address pool is exhausted.");
+    const peer = await client.query<{ id: string }>(`INSERT INTO vpn_peers
+      (user_id,device_id,subscription_id,vpn_node_id,public_key,assigned_ip,status,config_version)
+      VALUES ($1,$2,$3,$4,$5,$6,'pending',$7) RETURNING id`,
+      [auth.userId,auth.deviceId,entitlement.id,selected.id,input.clientPublicKey,
+        address.rows[0].assigned_ip,Number(selected.agent_config_version)]);
+    const session = await client.query<{ id: string; lease_expires_at: Date }>(`INSERT INTO vpn_sessions
+      (user_id,device_id,auth_session_id,subscription_id,vpn_node_id,vpn_peer_id,
+       client_public_key,assigned_ip,status,config_version,lease_expires_at,connection_group_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'provisioning',$9,now() + interval '5 minutes',$10)
+      RETURNING id,lease_expires_at`, [auth.userId,auth.deviceId,auth.sessionId,entitlement.id,
+        selected.id,peer.rows[0]!.id,input.clientPublicKey,address.rows[0].assigned_ip,
+        Number(selected.agent_config_version),connectionGroupId]);
+    authorizations.push(result({ ...selected, vpn_session_id: session.rows[0]!.id,
+      assigned_ip: address.rows[0].assigned_ip, lease_expires_at: session.rows[0]!.lease_expires_at }));
+  }
+  return { connection_group_id: connectionGroupId, paths: authorizations,
+    lease_expires_at: authorizations[0]!.lease_expires_at };
 }
 

@@ -35,9 +35,15 @@ public sealed class ProtocolHandlerTests : IDisposable
             applicationPaths = new[] { _executable },
             authorization = new
             {
-                node = new { endpoint = "198.51.100.20:51820", public_key = new string('A', 44) },
-                client = new { assigned_ip = "10.88.0.2", dns_servers = new[] { "1.1.1.1" } },
-                lease_expires_at = "2030-01-01T00:05:00.000Z"
+                paths = new[]
+                {
+                    new { node = new { endpoint = "198.51.100.20:51820", public_key = new string('A', 44) },
+                        client = new { assigned_ip = "10.88.0.2", dns_servers = new[] { "1.1.1.1" } },
+                        lease_expires_at = "2030-01-01T00:05:00.000Z" },
+                    new { node = new { endpoint = "198.51.100.21:51820", public_key = new string('B', 44) },
+                        client = new { assigned_ip = "10.89.0.2", dns_servers = new[] { "1.1.1.1" } },
+                        lease_expires_at = "2030-01-01T00:05:00.000Z" }
+                }
             }
         });
         Assert.True(connected.Ok);

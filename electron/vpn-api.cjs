@@ -36,6 +36,18 @@ function validateAuthorization(value) {
   return value;
 }
 
+function validateMultiAuthorization(value) {
+  if (!value || typeof value !== "object" ||
+      !requiredString(value.connection_group_id) ||
+      !Array.isArray(value.paths) || value.paths.length < 2 || value.paths.length > 5 ||
+      new Set(value.paths.map((path) => path?.node?.id)).size !== value.paths.length ||
+      !requiredString(value.lease_expires_at) || !Number.isFinite(Date.parse(value.lease_expires_at))) {
+    throw new Error("The Backend returned an invalid multi-entry authorization.");
+  }
+  value.paths.forEach(validateAuthorization);
+  return value;
+}
+
 function validateNodes(value) {
   if (!value || typeof value !== "object" || !Array.isArray(value.nodes)) {
     throw new Error("The Backend returned an invalid VPN node list.");
@@ -96,6 +108,20 @@ function createVpnApi({ requestAuthenticated }) {
       );
     },
 
+    async authorizeMulti(input) {
+      if (!WIREGUARD_KEY.test(input?.clientPublicKey || "")) {
+        throw new Error("A valid WireGuard public key is required.");
+      }
+      const pathCount = input?.pathCount ?? 2;
+      if (!Number.isInteger(pathCount) || pathCount < 2 || pathCount > 5) {
+        throw new Error("Multi-entry path count must be between two and five.");
+      }
+      return validateMultiAuthorization(await requestAuthenticated(
+        "/api/v1/vpn/authorize-multi",
+        { client_public_key: input.clientPublicKey, path_count: pathCount },
+      ));
+    },
+
     async disconnect() {
       const result = await requestAuthenticated(
         "/api/v1/vpn/disconnect",
@@ -112,6 +138,7 @@ function createVpnApi({ requestAuthenticated }) {
 module.exports = {
   createVpnApi,
   validateAuthorization,
+  validateMultiAuthorization,
   validateNodes,
 };
 

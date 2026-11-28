@@ -76,13 +76,17 @@ public sealed class ControlProtocolHandler(TunnelCoordinator coordinator, ITunne
         var input = request.Params.Deserialize<ConnectInput>(JsonOptions) ?? throw new InvalidDataException();
         var paths = ExecutablePathValidator.Validate(input.ApplicationPaths);
         var authorization = input.Authorization ?? throw new InvalidDataException();
-        var node = authorization.Node ?? throw new InvalidDataException();
-        var client = authorization.Client ?? throw new InvalidDataException();
-        if (!DateTimeOffset.TryParse(authorization.LeaseExpiresAt, out var lease)) throw new InvalidDataException();
-        var tunnelAuthorization = new TunnelAuthorization(
-            Required(node.Endpoint), Required(node.PublicKey), Required(client.AssignedIp),
-            client.DnsServers is { Count: > 0 } ? client.DnsServers : throw new InvalidDataException(), lease);
-        await coordinator.ConnectAsync(new ConnectRequest(Required(input.Generation), paths, tunnelAuthorization), cancellationToken);
+        if (authorization.Paths is not { Count: >= 2 and <= 5 }) throw new InvalidDataException();
+        var tunnelAuthorizations = authorization.Paths.Select(item =>
+        {
+            var node = item.Node ?? throw new InvalidDataException();
+            var client = item.Client ?? throw new InvalidDataException();
+            if (!DateTimeOffset.TryParse(item.LeaseExpiresAt, out var lease)) throw new InvalidDataException();
+            return new TunnelAuthorization(Required(node.Endpoint), Required(node.PublicKey),
+                Required(client.AssignedIp), client.DnsServers is { Count: > 0 }
+                    ? client.DnsServers : throw new InvalidDataException(), lease);
+        }).ToArray();
+        await coordinator.ConnectAsync(new ConnectRequest(Required(input.Generation), paths, tunnelAuthorizations), cancellationToken);
         return ControlResponse.Success(request.Id, coordinator.Status);
     }
 
@@ -99,7 +103,8 @@ public sealed class ControlProtocolHandler(TunnelCoordinator coordinator, ITunne
     private sealed record ControlRequest(int Version, string Id, string Method, JsonElement Params);
     private sealed record ConnectInput(string Generation, IReadOnlyList<string> ApplicationPaths, AuthorizationInput? Authorization);
     private sealed record DisconnectInput(string? Generation, string? Reason);
-    private sealed record AuthorizationInput(NodeInput? Node, ClientInput? Client, [property: JsonPropertyName("lease_expires_at")] string? LeaseExpiresAt);
+    private sealed record AuthorizationInput(IReadOnlyList<PathInput>? Paths);
+    private sealed record PathInput(NodeInput? Node, ClientInput? Client, [property: JsonPropertyName("lease_expires_at")] string? LeaseExpiresAt);
     private sealed record NodeInput(string? Endpoint, [property: JsonPropertyName("public_key")] string? PublicKey);
     private sealed record ClientInput([property: JsonPropertyName("assigned_ip")] string? AssignedIp, [property: JsonPropertyName("dns_servers")] IReadOnlyList<string>? DnsServers);
 }

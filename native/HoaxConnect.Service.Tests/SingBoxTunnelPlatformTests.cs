@@ -86,7 +86,10 @@ public sealed class SingBoxTunnelPlatformTests : IDisposable
 
     private static ConnectRequest Request() => new(
         "generation-1", [@"C:\Games\Game.exe"],
-        new TunnelAuthorization("198.51.100.20:51820", new string('B', 44), "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)));
+        [
+            new TunnelAuthorization("198.51.100.20:51820", new string('B', 44), "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)),
+            new TunnelAuthorization("198.51.100.21:51820", new string('C', 44), "10.89.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5))
+        ]);
 
     public void Dispose() => Directory.Delete(_root, true);
 

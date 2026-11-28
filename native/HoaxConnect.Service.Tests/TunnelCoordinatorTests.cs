@@ -74,10 +74,8 @@ public sealed class TunnelCoordinatorTests
         await coordinator.InitializeAsync(CancellationToken.None);
         var request = Request("generation-expiring") with
         {
-            Authorization = Request("generation-expiring").Authorization with
-            {
-                LeaseExpiresAt = DateTimeOffset.UtcNow.AddMilliseconds(80)
-            }
+            Authorizations = Request("generation-expiring").Authorizations.Select(item =>
+                item with { LeaseExpiresAt = DateTimeOffset.UtcNow.AddMilliseconds(80) }).ToArray()
         };
 
         await coordinator.ConnectAsync(request, CancellationToken.None);
@@ -91,7 +89,10 @@ public sealed class TunnelCoordinatorTests
     private static ConnectRequest Request(string generation) => new(
         generation,
         [@"C:\\Games\\Game.exe"],
-        new TunnelAuthorization("vpn.example.test:51820", new string('A', 44), "10.7.0.2/32", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)));
+        [
+            new TunnelAuthorization("vpn-a.example.test:51820", new string('A', 44), "10.7.0.2/32", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)),
+            new TunnelAuthorization("vpn-b.example.test:51820", new string('B', 44), "10.8.0.2/32", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5))
+        ]);
 
     private sealed class FakePlatform : ITunnelPlatform
     {

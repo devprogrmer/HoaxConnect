@@ -20,13 +20,14 @@ test("VPN IPC uses persisted selected applications instead of renderer paths", a
   });
 
   const result = await handlers.connect({
-    location: { countryCode: "DE" },
+    location: { countryCode: "DE", pathCount: 4 },
     apps: [{ path: "C:\\Windows\\System32\\cmd.exe" }],
   });
 
   assert.equal(result.ok, true);
   assert.deepEqual(received.apps, [{ path: "C:\\Games\\Allowed.exe" }]);
-  assert.deepEqual(received.location, { countryCode: "DE" });
+  assert.equal(received.countryCode, "DE");
+  assert.equal(received.pathCount, 4);
 });
 
 test("VPN IPC returns bounded errors and never exposes stacks", async () => {

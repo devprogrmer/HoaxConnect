@@ -31,12 +31,14 @@ public sealed class TunnelCoordinator(ITunnelPlatform platform)
             if (_status.Status == "connected")
                 throw new StaleGenerationException();
 
-            _status = new("connecting", request.Generation, request.Authorization.LeaseExpiresAt);
+            if (request.Authorizations.Count is < 2 or > 5)
+                throw new InvalidDataException("Two to five tunnel paths are required.");
+            _status = new("connecting", request.Generation, request.LeaseExpiresAt);
             try
             {
                 await platform.ConnectAsync(request, cancellationToken);
-                _status = new("connected", request.Generation, request.Authorization.LeaseExpiresAt);
-                ScheduleLeaseExpiry(request.Generation, request.Authorization.LeaseExpiresAt);
+                _status = new("connected", request.Generation, request.LeaseExpiresAt);
+                ScheduleLeaseExpiry(request.Generation, request.LeaseExpiresAt);
             }
             catch
             {

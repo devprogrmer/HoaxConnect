@@ -502,7 +502,7 @@ function registerAuthIPC() {
   });
   const vpnConnection = createVpnConnection({
     api: {
-      authorize: (input) => authOwner.authorizeVpn(input),
+      authorizeMulti: (input) => authOwner.authorizeVpnMulti(input),
       disconnect: () => authOwner.disconnectVpn(),
     },
     service: createVpnServiceClient(),

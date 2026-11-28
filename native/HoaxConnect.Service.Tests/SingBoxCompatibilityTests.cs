@@ -16,7 +16,10 @@ public sealed class SingBoxCompatibilityTests
         var peer = SingBoxIdentityProvider.Generate(executable);
         var request = new ConnectRequest(
             "generation-1", [@"C:\Games\Game.exe"],
-            new TunnelAuthorization("198.51.100.20:51820", peer.PublicKey, "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)));
+            [
+                new TunnelAuthorization("198.51.100.20:51820", peer.PublicKey, "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)),
+                new TunnelAuthorization("198.51.100.21:51820", peer.PublicKey, "10.89.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5))
+            ]);
         var path = Path.Combine(Path.GetTempPath(), $"hc-config-{Guid.NewGuid():N}.json");
         try
         {

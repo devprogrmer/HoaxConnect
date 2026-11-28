@@ -61,6 +61,8 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
   let subscriptionId = "";
   let token = "";
   let deviceId = "";
+  const multiNodeIds: string[] = [];
+  let multiGroupId = "";
   const peerKey = `${"B".repeat(43)}=`;
   let desiredPeerKey = peerKey;
   const authorize = (payload: unknown = {
@@ -68,6 +70,11 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
   }) => app.inject({
     method: "POST", url: "/api/v1/vpn/authorize",
     headers: { authorization: `Bearer ${token}` }, payload,
+  });
+  const authorizeMulti = (pathCount = 2) => app.inject({
+    method: "POST", url: "/api/v1/vpn/authorize-multi",
+    headers: { authorization: `Bearer ${token}` },
+    payload: { client_public_key: peerKey, path_count: pathCount },
   });
 
   try {
@@ -252,6 +259,43 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
       ));
     });
 
+    await t.test("atomically authorizes independent Iran entries from one active Turkey route group", async () => {
+      for (const [index, country] of ["TR", "IR", "IR"].entries()) {
+        const inserted = await pool.query<{ id: string }>(`INSERT INTO vpn_nodes
+          (name,country_code,region,hostname,public_endpoint,public_key,status,
+           capacity_peers,current_peers,enabled,last_seen_at,tunnel_cidr,listen_port,dns_servers,egress_interface)
+          VALUES ($1,$2,'multi',$3,$4,$5,'online',100,0,true,now(),$6::cidr,51820,
+            ARRAY['1.1.1.1'::inet],'eth0') RETURNING id`,
+          [`multi-${index}-${suffix}`, country, `multi-${index}-${suffix}.example.test`,
+            `198.51.100.${30 + index}:51820`, Buffer.alloc(32, 70 + index).toString("base64"),
+            `10.${120 + index}.0.0/24`]);
+        multiNodeIds.push(inserted.rows[0]!.id);
+      }
+      const group = await pool.query<{ id: string }>(`INSERT INTO vpn_route_groups
+        (name,gateway_node_id,enabled,phase,link_cidr,link_port,staged_at,activated_at)
+        VALUES ($1,$2,true,'active','10.253.91.0/24',51920,now(),now()) RETURNING id`,
+        [`multi-${suffix}`, multiNodeIds[0]]);
+      multiGroupId = group.rows[0]!.id;
+      for (const [index, nodeId] of multiNodeIds.slice(1).entries()) {
+        await pool.query(`INSERT INTO vpn_route_group_entries(group_id,entry_node_id,priority)
+          VALUES ($1,$2,$3)`, [multiGroupId, nodeId, index + 1]);
+      }
+      for (const nodeId of multiNodeIds) await pool.query(`INSERT INTO vpn_route_group_reports
+        (group_id,node_id,config_version,healthy,detail) VALUES ($1,$2,1,true,'integration-ok')`,
+        [multiGroupId, nodeId]);
+      const response = await authorizeMulti(2);
+      assert.equal(response.statusCode, 200, response.body);
+      const data = response.json().data;
+      assert.equal(data.paths.length, 2);
+      assert.deepEqual(data.paths.map((item: any) => item.node.id), multiNodeIds.slice(1));
+      assert.equal(new Set(data.paths.map((item: any) => item.client.assigned_ip)).size, 2);
+      const rows = await pool.query(`SELECT connection_group_id,status::text
+        FROM vpn_sessions WHERE connection_group_id = $1`, [data.connection_group_id]);
+      assert.equal(rows.rowCount, 2);
+      assert.ok(rows.rows.every((row: any) => row.status === "provisioning"));
+      assert.equal((await authorizeMulti(5)).json().error.code, "VPN_MULTI_ENTRY_UNAVAILABLE");
+    });
+
     await t.test("account moderation atomically revokes active VPN leases", async () => {
       const relogin = await owner.login({ identifier: `vpn_${suffix}`, password });
       assert.equal(relogin.ok, true, JSON.stringify(relogin));
@@ -305,6 +349,8 @@ test("per-device VPN authorization enforces entitlement and revocation", { skip:
     });
   } finally {
     await app.close();
+    if (multiGroupId) await pool.query("DELETE FROM vpn_route_groups WHERE id = $1", [multiGroupId]);
+    if (multiNodeIds.length) await pool.query("DELETE FROM vpn_nodes WHERE id = ANY($1::uuid[])", [multiNodeIds]);
     if (ids.user) await pool.query("DELETE FROM users WHERE id = $1", [ids.user]);
     if (ids.admin) await pool.query("DELETE FROM admin_accounts WHERE id = $1", [ids.admin]);
     if (ids.node) await pool.query("DELETE FROM vpn_nodes WHERE id = $1", [ids.node]);

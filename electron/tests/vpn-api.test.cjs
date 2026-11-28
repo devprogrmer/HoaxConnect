@@ -86,6 +86,25 @@ test("VPN API disconnect uses the authenticated Backend route", async () => {
   }]);
 });
 
+test("VPN API validates and requests two independent Iran entry paths", async () => {
+  const requests = [];
+  const api = createVpnApi({ requestAuthenticated: async (pathname, payload) => {
+    requests.push({ pathname, payload });
+    const path = (id, endpoint, address) => ({ vpn_session_id: `session-${id}`,
+      node: { id, endpoint, public_key: SERVER_KEY },
+      client: { assigned_ip: address, dns_servers: ["1.1.1.1"] },
+      lease_expires_at: "2030-01-01T00:05:00.000Z" });
+    return { connection_group_id: "group", paths: [
+      path("iran-a", "198.51.100.20:51820", "10.88.0.2"),
+      path("iran-b", "198.51.100.21:51820", "10.89.0.2")],
+      lease_expires_at: "2030-01-01T00:05:00.000Z" };
+  } });
+  const result = await api.authorizeMulti({ clientPublicKey: CLIENT_KEY, pathCount: 2 });
+  assert.equal(result.paths.length, 2);
+  assert.deepEqual(requests, [{ pathname: "/api/v1/vpn/authorize-multi",
+    payload: { client_public_key: CLIENT_KEY, path_count: 2 } }]);
+});
+
 test("VPN API lists validated live Backend nodes", async () => {
   const requests = [];
   const api = createVpnApi({

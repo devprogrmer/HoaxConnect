@@ -5,7 +5,7 @@ import { authenticate } from "./auth.js";
 import { pool } from "./db.js";
 import { ApiError } from "./errors.js";
 import { authenticateVpnAgent } from "./vpn-agent-auth.js";
-import { authorizeVpnSession, revokeVpnSessions } from "./vpn-control.js";
+import { authorizeVpnMultiSession, authorizeVpnSession, revokeVpnSessions } from "./vpn-control.js";
 import { failUnhealthyGroups, ipv4Link } from "./route-group-transport.js";
 
 const publicKey = z.string().regex(/^[A-Za-z0-9+/]{43}=$/);
@@ -19,6 +19,10 @@ const authorizeSchema = z.object({
   client_public_key: publicKey,
   country_code: z.string().regex(/^[A-Z]{2}$/).optional(),
   region: z.string().min(1).max(100).optional(),
+}).strict();
+const multiAuthorizeSchema = z.object({
+  client_public_key: publicKey,
+  path_count: z.number().int().min(2).max(5).default(2),
 }).strict();
 
 export async function registerVpnRoutes(app: FastifyInstance) {
@@ -58,6 +62,20 @@ export async function registerVpnRoutes(app: FastifyInstance) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally { client.release(); }
+  });
+  app.post("/api/v1/vpn/authorize-multi", async (request) => {
+    const auth = await authenticate(request);
+    const input = multiAuthorizeSchema.parse(request.body);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const data = await authorizeVpnMultiSession(client, auth, {
+        clientPublicKey: input.client_public_key, pathCount: input.path_count,
+      });
+      await client.query("COMMIT");
+      return { data };
+    } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+    finally { client.release(); }
   });
 
   app.post("/api/v1/vpn/disconnect", async (request) => {

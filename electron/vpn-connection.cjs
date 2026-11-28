@@ -97,12 +97,8 @@ function createVpnConnection({ api, service, clock = defaultClock }) {
       const work = (async () => {
         try {
           const identity = await service.identity();
-          const authorization = await api.authorize({
-            clientPublicKey: identity.publicKey,
-            ...(input?.location?.countryCode
-              ? { countryCode: input.location.countryCode }
-              : {}),
-            ...(input?.location?.region ? { region: input.location.region } : {}),
+          const authorization = await api.authorizeMulti({
+            clientPublicKey: identity.publicKey, pathCount: input?.pathCount ?? 2,
           });
           remoteAuthorized = true;
           await service.connect({
@@ -113,7 +109,8 @@ function createVpnConnection({ api, service, clock = defaultClock }) {
           activeGeneration = generation;
           state = {
             status: "connected",
-            node: authorization.node,
+            node: authorization.paths[0].node,
+            paths: authorization.paths.map((path) => path.node),
             leaseExpiresAt: authorization.lease_expires_at,
             error: null,
           };

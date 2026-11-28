@@ -12,7 +12,10 @@ public sealed record TunnelAuthorization(
 public sealed record ConnectRequest(
     string Generation,
     IReadOnlyList<string> ApplicationPaths,
-    TunnelAuthorization Authorization);
+    IReadOnlyList<TunnelAuthorization> Authorizations)
+{
+    public DateTimeOffset LeaseExpiresAt => Authorizations.Min(item => item.LeaseExpiresAt);
+}
 
 public sealed record TunnelStatus(
     [property: JsonPropertyName("status")] string Status,

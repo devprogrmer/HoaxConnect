@@ -17,6 +17,8 @@ function normalizeLocation(input) {
       ? { countryCode: location.countryCode }
       : {}),
     ...(typeof location.region === "string" ? { region: location.region } : {}),
+    ...(Number.isInteger(location.pathCount) && location.pathCount >= 2 && location.pathCount <= 5
+      ? { pathCount: location.pathCount } : {}),
   };
 }
 
@@ -34,7 +36,7 @@ function createVpnIpcHandlers({ connection, readSplitState }) {
         const state = await connection.connect({
           mode: split.mode,
           apps: split.selectedApps,
-          location: normalizeLocation(input),
+          ...normalizeLocation(input),
         });
         return { ok: true, state };
       } catch (error) {

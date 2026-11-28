@@ -207,6 +207,7 @@ declare global {
   interface HoaxVpnConnectionState {
     status: HoaxVpnConnectionStatus;
     node: null | { id: string; endpoint: string; public_key: string };
+    paths?: Array<{ id: string; endpoint: string; public_key: string }>;
     leaseExpiresAt: string | null;
     error: null | { code: string; message: string };
   }
@@ -596,6 +597,7 @@ declare global {
       connect(location?: {
         countryCode?: string;
         region?: string;
+        pathCount?: number;
       }): Promise<HoaxVpnResponse>;
       disconnect(): Promise<HoaxVpnResponse>;
     };

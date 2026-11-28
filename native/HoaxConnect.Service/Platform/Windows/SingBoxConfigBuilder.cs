@@ -11,18 +11,31 @@ public static class SingBoxConfigBuilder
 
     public static string Build(ConnectRequest request, TunnelIdentity identity)
     {
-        var (host, port) = ParseEndpoint(request.Authorization.Endpoint);
-        var assignedAddress = request.Authorization.AssignedAddress.Contains('/')
-            ? request.Authorization.AssignedAddress
-            : request.Authorization.AssignedAddress + (request.Authorization.AssignedAddress.Contains(':') ? "/128" : "/32");
-        if (request.Authorization.DnsServers.Count == 0)
+        if (request.Authorizations.Count is < 2 or > 5)
+            throw new InvalidDataException("Two to five independent entry paths are required.");
+        if (request.Authorizations.Any(item => item.DnsServers.Count == 0))
             throw new InvalidDataException("At least one VPN DNS server is required.");
-        var dnsServers = request.Authorization.DnsServers.Select((server, index) =>
+        var endpointTags = request.Authorizations.Select((_, index) => $"wg-{index}").ToArray();
+        var endpoints = request.Authorizations.Select((authorization, index) =>
         {
-            if (!IPAddress.TryParse(server, out _))
-                throw new InvalidDataException("VPN DNS server is invalid.");
-            return new { type = "udp", tag = $"vpn-dns-{index}", server, server_port = 53, detour = "wg" };
+            var (host, port) = ParseEndpoint(authorization.Endpoint);
+            var assignedAddress = authorization.AssignedAddress.Contains('/')
+                ? authorization.AssignedAddress
+                : authorization.AssignedAddress + (authorization.AssignedAddress.Contains(':') ? "/128" : "/32");
+            return new
+            {
+                type = "wireguard", tag = endpointTags[index], system = false,
+                address = new[] { assignedAddress }, private_key = identity.PrivateKey,
+                peers = new object[] { new { address = host, port,
+                    public_key = authorization.ServerPublicKey,
+                    allowed_ips = new[] { "0.0.0.0/0", "::/0" },
+                    persistent_keepalive_interval = 5 } }
+            };
         }).ToArray();
+        var dnsAddress = request.Authorizations[0].DnsServers[0];
+        if (!IPAddress.TryParse(dnsAddress, out _)) throw new InvalidDataException("VPN DNS server is invalid.");
+        var dnsServers = new[] { new { type = "udp", tag = "vpn-dns-0", server = dnsAddress,
+            server_port = 53, detour = "multi-entry" } };
 
         var config = new
         {
@@ -41,42 +54,26 @@ public static class SingBoxConfigBuilder
                     dns_mode = "hijack",
                 }
             },
-            endpoints = new object[]
-            {
-                new
-                {
-                    type = "wireguard",
-                    tag = "wg",
-                    system = false,
-                    address = new[] { assignedAddress },
-                    private_key = identity.PrivateKey,
-                    peers = new object[]
-                    {
-                        new
-                        {
-                            address = host,
-                            port,
-                            public_key = request.Authorization.ServerPublicKey,
-                            allowed_ips = new[] { "0.0.0.0/0", "::/0" },
-                            persistent_keepalive_interval = 25,
-                        }
-                    }
-                }
-            },
+            endpoints,
             dns = new
             {
                 servers = dnsServers,
                 final = dnsServers[0].tag,
                 strategy = "prefer_ipv4",
             },
-            outbounds = new object[] { new { type = "direct", tag = "direct" } },
+            outbounds = new object[] {
+                new { type = "direct", tag = "direct" },
+                new { type = "urltest", tag = "multi-entry", outbounds = endpointTags,
+                    url = "https://cp.cloudflare.com/generate_204", interval = "3s",
+                    tolerance = 20, idle_timeout = "30s", interrupt_exist_connections = true }
+            },
             route = new
             {
                 auto_detect_interface = true,
                 rules = new object[]
                 {
                     new { port = 53, action = "hijack-dns" },
-                    new { process_path = request.ApplicationPaths, action = "route", outbound = "wg" },
+                    new { process_path = request.ApplicationPaths, action = "route", outbound = "multi-entry" },
                 },
                 final = "direct",
             },

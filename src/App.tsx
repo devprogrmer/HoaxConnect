@@ -459,6 +459,8 @@ export default function App() {
   const [connection, setConnection] =
     useState<ConnectionState>("idle");
   const [vpnError, setVpnError] = useState("");
+  const [activePathCount, setActivePathCount] = useState(0);
+  const [multiPathCount, setMultiPathCount] = useState(2);
 
   async function performSignOut(allDevices: boolean) {
     if (logoutBusy) return;
@@ -574,6 +576,7 @@ export default function App() {
         if (!disposed && result.ok) {
           setConnection(result.state.status);
           setVpnError(result.state.error?.message || "");
+          setActivePathCount(result.state.paths?.length || 0);
         }
       } finally {
         busy = false;
@@ -768,6 +771,7 @@ export default function App() {
         return;
       }
       setConnection(result.state.status);
+      setActivePathCount(0);
       setVpnError("");
       setDownload(0);
       setUpload(0);
@@ -793,6 +797,7 @@ export default function App() {
     const result = await vpn.connect({
       countryCode: selectedServer.countryCode.toUpperCase(),
       region: selectedServer.region,
+      pathCount: multiPathCount,
     });
     if (!result.ok) {
       setConnection("error");
@@ -801,7 +806,8 @@ export default function App() {
       return;
     }
     setConnection(result.state.status);
-    notify(`Connected through ${selectedServer.country}.`);
+    setActivePathCount(result.state.paths?.length || 0);
+    notify(`Connected with ${result.state.paths?.length || 0} independent Iran entry paths.`);
   }
 
   async function scanGameNow(
@@ -1120,11 +1126,19 @@ export default function App() {
 
             <p>
               {connection === "connected"
-                ? `Protected through ${selectedServer.name}`
+                ? `Protected through ${activePathCount} live Iran entry paths with automatic failover`
                 : connection === "error" && vpnError
                   ? vpnError
                 : "Select a route and connect to HoaxConnect."}
             </p>
+
+            <label className="field">
+              <span>SIMULTANEOUS IRAN ENTRY PATHS</span>
+              <select value={multiPathCount} disabled={connection !== "idle" && connection !== "error"}
+                onChange={(event) => setMultiPathCount(Number(event.target.value))}>
+                {[2, 3, 4, 5].map((count) => <option key={count} value={count}>{count} paths</option>)}
+              </select>
+            </label>
 
             <button
               className="smartButton"

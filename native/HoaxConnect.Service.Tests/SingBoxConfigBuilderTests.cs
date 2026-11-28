@@ -13,7 +13,7 @@ public sealed class SingBoxConfigBuilderTests
         var request = new ConnectRequest(
             "generation-1",
             [@"C:\Games\One.exe", @"C:\Games\Two.exe"],
-            new TunnelAuthorization("198.51.100.20:51820", new string('B', 44), "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)));
+            Paths());
 
         using var config = JsonDocument.Parse(SingBoxConfigBuilder.Build(request, new TunnelIdentity("public", new string('A', 44))));
         var root = config.RootElement;
@@ -28,13 +28,18 @@ public sealed class SingBoxConfigBuilderTests
         var dnsServer = Assert.Single(dns.GetProperty("servers").EnumerateArray());
         Assert.Equal("udp", dnsServer.GetProperty("type").GetString());
         Assert.Equal("1.1.1.1", dnsServer.GetProperty("server").GetString());
-        Assert.Equal("wg", dnsServer.GetProperty("detour").GetString());
+        Assert.Equal("multi-entry", dnsServer.GetProperty("detour").GetString());
 
         var endpoint = root.GetProperty("endpoints")[0];
         Assert.Equal("wireguard", endpoint.GetProperty("type").GetString());
         Assert.Equal("10.88.0.2/32", endpoint.GetProperty("address")[0].GetString());
         Assert.Equal("198.51.100.20", endpoint.GetProperty("peers")[0].GetProperty("address").GetString());
         Assert.Equal(51820, endpoint.GetProperty("peers")[0].GetProperty("port").GetInt32());
+        Assert.Equal(2, root.GetProperty("endpoints").GetArrayLength());
+        var selector = root.GetProperty("outbounds")[1];
+        Assert.Equal("urltest", selector.GetProperty("type").GetString());
+        Assert.Equal(2, selector.GetProperty("outbounds").GetArrayLength());
+        Assert.True(selector.GetProperty("interrupt_exist_connections").GetBoolean());
 
         var route = root.GetProperty("route");
         Assert.True(route.GetProperty("auto_detect_interface").GetBoolean());
@@ -45,7 +50,7 @@ public sealed class SingBoxConfigBuilderTests
         Assert.Equal("hijack-dns", dnsRule.GetProperty("action").GetString());
         Assert.Equal(53, dnsRule.GetProperty("port").GetInt32());
         var selectedRule = rules[1];
-        Assert.Equal("wg", selectedRule.GetProperty("outbound").GetString());
+        Assert.Equal("multi-entry", selectedRule.GetProperty("outbound").GetString());
         Assert.Equal(2, selectedRule.GetProperty("process_path").GetArrayLength());
     }
 
@@ -55,8 +60,15 @@ public sealed class SingBoxConfigBuilderTests
     [InlineData("example.test:0")]
     public void RejectsInvalidEndpoints(string endpoint)
     {
-        var request = new ConnectRequest("g", [@"C:\Games\Game.exe"],
-            new TunnelAuthorization(endpoint, new string('B', 44), "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)));
+        var paths = Paths().ToArray();
+        paths[0] = paths[0] with { Endpoint = endpoint };
+        var request = new ConnectRequest("g", [@"C:\Games\Game.exe"], paths);
         Assert.Throws<InvalidDataException>(() => SingBoxConfigBuilder.Build(request, new TunnelIdentity("public", new string('A', 44))));
     }
+
+    private static IReadOnlyList<TunnelAuthorization> Paths() =>
+    [
+        new TunnelAuthorization("198.51.100.20:51820", new string('B', 44), "10.88.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5)),
+        new TunnelAuthorization("198.51.100.21:51820", new string('C', 44), "10.89.0.2", ["1.1.1.1"], DateTimeOffset.UtcNow.AddMinutes(5))
+    ];
 }
