@@ -16,6 +16,9 @@ const {
   canonicalDeviceProofPayload,
   signDeviceProof,
 } = require("./device-identity.cjs");
+const {
+  createVpnApi,
+} = require("../vpn-api.cjs");
 
 const ERROR_MESSAGES = Object.freeze({
   SECURE_STORAGE_UNAVAILABLE:
@@ -64,7 +67,7 @@ const PASSTHROUGH_ERROR_CODES = new Set([
   "AUTH_RESPONSE_INVALID",
 ]);
 
-function authError(code, diagnostic = "") {
+function authError(code, diagnostic = "", publicMessage = null) {
   const error = new Error(
     ERROR_MESSAGES[code] ||
       ERROR_MESSAGES.AUTH_REJECTED
@@ -75,6 +78,16 @@ function authError(code, diagnostic = "") {
     /^[a-z0-9_, -]{1,160}$/.test(diagnostic)
   ) {
     error.authDiagnostic = diagnostic;
+  }
+  if (
+    (code === "ACCOUNT_SUSPENDED" || code === "ACCOUNT_BANNED") &&
+    typeof publicMessage === "string" &&
+    publicMessage.trim().length >= 8 &&
+    publicMessage.trim().length <= 500 &&
+    // eslint-disable-next-line no-control-regex
+    !/[\x00-\x1f\x7f]/.test(publicMessage)
+  ) {
+    error.publicMessage = publicMessage.trim();
   }
   return error;
 }
@@ -103,6 +116,9 @@ function safeError(error) {
         ? `Backend response check failed: ${error.authDiagnostic}.`
         : diagnosticCode
         ? `The Backend rejected the request (${diagnosticCode}).`
+        : error && error.publicMessage &&
+            (code === "ACCOUNT_SUSPENDED" || code === "ACCOUNT_BANNED")
+          ? `${ERROR_MESSAGES[code]} Reason: ${error.publicMessage}`
         : ERROR_MESSAGES[code] ||
           ERROR_MESSAGES.AUTH_REJECTED,
   };
@@ -169,6 +185,12 @@ function createElectronAuthOwner({
   });
 
   let accessToken = null;
+  let operations = Promise.resolve();
+  function serial(operation) {
+    const result = operations.then(operation);
+    operations = result.catch(() => {});
+    return result;
+  }
   let currentState = sanitizeAuthState({
     status: "signed_out",
   });
@@ -291,7 +313,11 @@ function createElectronAuthOwner({
       if (
         PASSTHROUGH_ERROR_CODES.has(backendCode)
       ) {
-        throw authError(backendCode);
+        throw authError(
+          backendCode,
+          "",
+          body.error.message
+        );
       }
 
       const error = authError("AUTH_REJECTED");
@@ -613,6 +639,9 @@ function createElectronAuthOwner({
 
   function getState() {
     try {
+      if (accessToken && currentState.status === "authenticated") {
+        return { ok: true, state: currentState };
+      }
       const stored = store.load();
 
       if (stored && stored.refreshToken) {
@@ -638,16 +667,69 @@ function createElectronAuthOwner({
     }
   }
 
+  async function requestAuthenticated(pathname, payload) {
+    if (!accessToken) {
+      throw authError("AUTH_REJECTED");
+    }
+    try {
+      return await postJson(pathname, payload, accessToken);
+    } catch (error) {
+      if (error?.backendCode !== "INVALID_ACCESS_TOKEN") throw error;
+      const renewed = await restore();
+      if (!renewed.ok || !accessToken) {
+        throw authError("AUTH_REJECTED");
+      }
+      return await postJson(pathname, payload, accessToken);
+    }
+  }
+
+  const vpnApi = createVpnApi({ requestAuthenticated });
+
   return Object.freeze({
     getState,
-    restore,
-    logout,
-    logoutAll,
+    restore: () => serial(restore),
+    logout: () => serial(logout),
+    logoutAll: () => serial(logoutAll),
     login(input) {
-      return authenticate("login", input);
+      return serial(() => authenticate("login", input));
     },
     register(input) {
-      return authenticate("register", input);
+      return serial(() => authenticate("register", input));
+    },
+    authorizeVpn(input) {
+      return serial(() => vpnApi.authorize(input));
+    },
+    authorizeVpnMulti(input) {
+      return serial(() => vpnApi.authorizeMulti(input));
+    },
+    listVpnNodes() {
+      return serial(() => vpnApi.nodes());
+    },
+    disconnectVpn() {
+      return serial(() => vpnApi.disconnect());
+    },
+    reportDeviceState(payload, expectedDeviceId) {
+      return serial(async () => {
+        if (!accessToken || currentState.device?.id !== expectedDeviceId) {
+          return { ok: false, error: { code: "SIGNED_OUT" } };
+        }
+        try {
+          try {
+            await postJson("/api/v1/client/device-report", payload, accessToken);
+          } catch (error) {
+            if (error.backendCode !== "INVALID_ACCESS_TOKEN") throw error;
+            const renewed = await restore();
+            if (!renewed.ok) return renewed;
+            await postJson("/api/v1/client/device-report", payload, accessToken);
+          }
+          return { ok: true };
+        } catch (error) {
+          return { ok: false, error: safeError(error) };
+        }
+      });
+    },
+    getDeviceIdForMainProcess() {
+      return accessToken ? currentState.device?.id || null : null;
     },
     getAccessTokenForMainProcess() {
       return accessToken;

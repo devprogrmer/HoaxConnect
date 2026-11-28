@@ -33,6 +33,10 @@ COPY package.json ./
 COPY migrations ./migrations
 COPY scripts ./scripts
 
+# A checkout created with umask 077 must still be readable by the runtime user.
+RUN chmod -R a+rX /app/dist /app/migrations /app/scripts \
+    && chmod a+r /app/package.json
+
 USER node
 
 ENTRYPOINT ["dumb-init", "--"]

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { config } from "./config.js";
 import { pool } from "./db.js";
 import { ApiError } from "./errors.js";
+import { revokeVpnSessions } from "./vpn-control.js";
 import {
   decryptRecoveryResponse,
   encryptRecoveryResponse,
@@ -365,7 +366,8 @@ export async function authenticate(
        AND s.expires_at > now()
        AND u.status = 'active'
        AND u.auth_version = $4
-       AND d.revoked_at IS NULL`,
+       AND d.revoked_at IS NULL
+       AND d.banned_at IS NULL`,
     [
       claims.sid,
       claims.sub,
@@ -377,6 +379,17 @@ export async function authenticate(
   const context = result.rows[0];
 
   if (!context) {
+    const moderated = await pool.query<UserRow>(
+      `SELECT u.*
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.id = $1 AND s.user_id = $2 AND s.device_id = $3
+         AND u.status IN ('suspended', 'banned')`,
+      [claims.sid, claims.sub, claims.did]
+    );
+    if (moderated.rows[0]) {
+      assertUserCanAuthenticate(moderated.rows[0]);
+    }
     throw new ApiError(
       401,
       "SESSION_INVALID",
@@ -875,25 +888,6 @@ async function createRefreshChallenge(
       );
     }
 
-    if (session.status !== "active") {
-      throw new ApiError(
-        401,
-        "SESSION_INVALID",
-        "The refresh session is not active."
-      );
-    }
-
-    if (
-      new Date(session.expires_at).getTime() <=
-      Date.now()
-    ) {
-      throw new ApiError(
-        401,
-        "SESSION_EXPIRED",
-        "The refresh session has expired."
-      );
-    }
-
     const userResult = await client.query<UserRow>(
       `SELECT *
        FROM users
@@ -913,6 +907,25 @@ async function createRefreshChallenge(
     }
 
     assertUserCanAuthenticate(user);
+
+    if (session.status !== "active") {
+      throw new ApiError(
+        401,
+        "SESSION_INVALID",
+        "The refresh session is not active."
+      );
+    }
+
+    if (
+      new Date(session.expires_at).getTime() <=
+      Date.now()
+    ) {
+      throw new ApiError(
+        401,
+        "SESSION_EXPIRED",
+        "The refresh session has expired."
+      );
+    }
 
     const deviceResult =
       await client.query<AuthDeviceRow>(
@@ -1389,6 +1402,12 @@ async function logout(
       [auth.sessionId]
     );
 
+    await revokeVpnSessions(
+      client,
+      { authSessionId: auth.sessionId },
+      "user_logout",
+    );
+
     await audit(
       client,
       request,
@@ -1436,6 +1455,8 @@ async function logoutAll(
          AND status = 'active'`,
       [auth.userId]
     );
+
+    await revokeVpnSessions(client, { userId: auth.userId }, "logout_all");
 
     await audit(
       client,
@@ -1545,6 +1566,8 @@ async function revokeDevice(
          AND status = 'active'`,
       [deviceId]
     );
+
+    await revokeVpnSessions(client, { deviceId }, "device_revoked");
 
     await audit(
       client,
@@ -1718,31 +1741,4 @@ export async function registerAuthRoutes(
     }
   );
 
-  app.get(
-    "/api/v1/admin/status",
-    async (request) => {
-      const auth = await authenticate(request);
-
-      if (
-        ![
-          "superadmin",
-          "admin",
-          "support",
-          "read_only"
-        ].includes(auth.role)
-      ) {
-        throw new ApiError(
-          403,
-          "ADMIN_ACCESS_REQUIRED",
-          "Administrative access is required."
-        );
-      }
-
-      throw new ApiError(
-        501,
-        "ADMIN_API_NOT_ENABLED",
-        "The administrative API is reserved but not enabled in Stage 2A."
-      );
-    }
-  );
 }

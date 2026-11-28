@@ -244,6 +244,9 @@
 }
 
 .splitAppList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
   max-height: 510px;
 
   margin-top: 12px;
@@ -256,12 +259,14 @@
 .splitApp {
   width: 100%;
 
-  min-height: 69px;
+  min-height: 125px;
+  position: relative;
 
   display: grid;
 
-  grid-template-columns:
-    42px 1fr 32px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
 
   align-items: center;
 
@@ -269,12 +274,12 @@
 
   padding: 9px 11px;
 
-  border: 0;
-  border-bottom: 1px solid #141b22;
+  border: 1px solid #26323d;
+  border-radius: 10px;
 
   background: transparent;
 
-  text-align: left;
+  text-align: center;
 
   color: #89939f;
 
@@ -287,13 +292,56 @@
 }
 
 .splitAppSelected {
+  border-color: #34e98e;
   background:
     rgba(52, 233, 142, .025);
 }
 
+.splitApp:focus-visible {
+  outline: 2px solid #34e98e;
+  outline-offset: -3px;
+}
+
+.splitCatalog {
+  margin: 18px 0;
+}
+
+.splitCatalogGame:disabled {
+  cursor: default;
+}
+
+.splitCatalogGame strong {
+  color: #d3dae2;
+}
+
+.splitCatalogArtwork {
+  width: 100%;
+  aspect-ratio: 460 / 215;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #10161c;
+}
+
+.splitCatalogArtwork img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.splitApp .splitCheck {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+
 .splitAppIcon {
-  width: 38px;
-  height: 38px;
+  width: 52px;
+  height: 52px;
 
   display: grid;
   place-items: center;
@@ -308,19 +356,22 @@
 }
 
 .splitAppIcon img {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
 
   object-fit: contain;
 }
 
 .splitAppInfo {
   min-width: 0;
+  max-width: 100%;
 }
 
 .splitAppName {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
 
   gap: 8px;
 }
@@ -328,7 +379,7 @@
 .splitAppInfo strong {
   color: #d3dae2;
 
-  font-size: 10px;
+  font-size: 13px;
 }
 
 .splitAppInfo > span {

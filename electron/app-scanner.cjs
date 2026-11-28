@@ -1,6 +1,11 @@
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const {
+  executableCandidates,
+  scanEpicManifests,
+  scanSteamLibraries,
+} = require("./launcher-scanner.cjs");
 
 function runPowerShell(script, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
@@ -116,6 +121,39 @@ function makeID(exePath) {
     .toString("base64url");
 }
 
+function mergeDiscoveredApps(genericApps, launcherApps) {
+  const merged = new Map();
+  for (const app of genericApps || []) {
+    if (!app || typeof app.path !== "string") continue;
+    merged.set(path.win32.normalize(app.path).toLowerCase(), { ...app });
+  }
+  for (const app of launcherApps || []) {
+    if (!app || typeof app.path !== "string") continue;
+    const key = path.win32.normalize(app.path).toLowerCase();
+    const existing = merged.get(key);
+    merged.set(key, {
+      ...(existing || {}),
+      ...app,
+      running: Boolean(existing?.running || app.running),
+    });
+  }
+  return [...merged.values()]
+    .sort((a, b) => {
+      if (a.running !== b.running) return a.running ? -1 : 1;
+      return String(a.name).localeCompare(String(b.name));
+    })
+    .slice(0, 2000);
+}
+
+function executablePathsForInstalledItem(item) {
+  const explicit = normalizeExePath(item?.executable);
+  if (explicit) return [explicit];
+  if (!item?.installLocation || typeof item.installLocation !== "string") return [];
+  return executableCandidates(item.installLocation, 0)
+    .map((candidate) => normalizeExePath(candidate))
+    .filter(Boolean);
+}
+
 async function scanWindowsApps() {
   if (process.platform !== "win32") {
     return [];
@@ -220,13 +258,16 @@ $running = @(
 
   const result = new Map();
 
-  for (const item of array(raw.installed)) {
+  const expandedInstalled = array(raw.installed).flatMap((item) =>
+    executablePathsForInstalledItem(item).map((executable) => ({
+      ...item,
+      executable,
+    }))
+  );
+
+  for (const item of expandedInstalled) {
     let exePath =
       normalizeExePath(item.executable);
-
-    if (!exePath && item.installLocation) {
-      continue;
-    }
 
     if (!exePath) {
       continue;
@@ -319,15 +360,26 @@ $running = @(
     });
   }
 
-  return Array.from(result.values())
-    .sort((a, b) => {
-      if (a.running !== b.running) {
-        return a.running ? -1 : 1;
-      }
+  const programFilesX86 = process.env["PROGRAMFILES(X86)"] || process.env.ProgramFiles;
+  const launcherApps = [];
+  if (programFilesX86) {
+    launcherApps.push(...scanSteamLibraries({
+      steamRoot: path.join(programFilesX86, "Steam"),
+    }));
+  }
+  if (process.env.ProgramData) {
+    launcherApps.push(...scanEpicManifests({
+      manifestRoot: path.join(
+        process.env.ProgramData,
+        "Epic",
+        "EpicGamesLauncher",
+        "Data",
+        "Manifests",
+      ),
+    }));
+  }
 
-      return a.name.localeCompare(b.name);
-    })
-    .slice(0, 500);
+  return mergeDiscoveredApps(Array.from(result.values()), launcherApps);
 }
 
 function appFromManualPath(exePath) {
@@ -368,4 +420,6 @@ function appFromManualPath(exePath) {
 module.exports = {
   scanWindowsApps,
   appFromManualPath,
+  executablePathsForInstalledItem,
+  mergeDiscoveredApps,
 };

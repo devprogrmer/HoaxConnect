@@ -1,0 +1,62 @@
+name: Windows update delta
+
+on:
+  workflow_run:
+    workflows:
+      - Windows
+    types:
+      - completed
+    branches:
+      - codex/**
+  push:
+    paths:
+      - .github/workflows/windows-delta.yml
+      - scripts/measure-windows-delta.mjs
+  workflow_dispatch:
+    inputs:
+      baseline_run:
+        description: Previous store-asar Windows workflow run ID
+        required: true
+        default: "45573891815"
+      candidate_run:
+        description: Windows installer workflow run ID
+        required: true
+        default: "45575865146"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  measure:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.baseline_run || '45573891815' }}
+          name: HoaxConnect-Windows-x64
+          path: baseline
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.candidate_run || github.event.workflow_run.id || '45575865146' }}
+          name: HoaxConnect-Windows-x64
+          path: candidate
+      - name: Enforce the differential update limit
+        run: |
+          baseline_blockmap=(baseline/HoaxConnect-*-Setup.exe.blockmap)
+          candidate_blockmap=(candidate/HoaxConnect-*-Setup.exe.blockmap)
+          test "${#baseline_blockmap[@]}" -eq 1
+          test "${#candidate_blockmap[@]}" -eq 1
+          node scripts/measure-windows-delta.mjs \
+            "${baseline_blockmap[0]}" \
+            "${candidate_blockmap[0]}" \
+            25000000

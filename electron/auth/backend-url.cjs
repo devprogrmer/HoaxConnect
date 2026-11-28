@@ -17,7 +17,7 @@ function resolveBackendBaseUrl({
 
   const effectiveUrl =
     configured ||
-    (isPackaged ? "https://hoaxnet.ir" : "");
+    (isPackaged ? "https://api.hoaxnet.ir" : "");
 
   if (!effectiveUrl && !isPackaged) {
     return "http://127.0.0.1:3100";

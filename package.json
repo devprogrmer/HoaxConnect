@@ -1,7 +1,7 @@
 {
   "name": "hoaxconnect",
   "private": true,
-  "version": "0.3.9",
+  "version": "0.4.3",
   "description": "Windows gaming network diagnostics and VPN client",
   "author": "HoaxConnect",
   "type": "module",
@@ -13,12 +13,19 @@
     "electron": "wait-on http://localhost:5173 && electron .",
     "dev:desktop": "concurrently -k \"npm run dev\" \"npm run electron\"",
     "build:ui": "tsc -b && vite build",
+    "dev:admin": "vite --config admin/vite.config.ts",
+    "build:admin": "tsc -p admin/tsconfig.json && vite build --config admin/vite.config.ts",
     "dist": "npm run build:ui && electron-builder",
-    "dist:win": "npm run build:ui && electron-builder --win nsis --x64 --publish never",
-    "test:electron": "node --test electron/tests/*.test.cjs"
+    "build:tunnel-service": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows-tunnel-service.ps1",
+    "dist:win": "npm run build:tunnel-service && npm run build:ui && electron-builder --win nsis --x64 --publish never",
+    "test:electron": "node --test electron/tests/*.test.cjs",
+    "test:device-ui": "node --import ./backend/node_modules/tsx/dist/loader.mjs scripts/test-device-reporting.mjs",
+    "test:vpn-ui": "node --test scripts/tests/real-vpn-ui.test.mjs",
+    "test:i18n": "node --test scripts/tests/i18n.test.mjs",
+    "test:update-artifacts": "node --test scripts/tests/verify-windows-update.test.mjs scripts/tests/measure-windows-update.test.mjs"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9",
+    "electron-updater": "^6.8.11",
     "flag-icons": "^7.5.0",
     "lucide-react": "^1.48.0",
     "react": "^19.2.8",
@@ -31,7 +38,8 @@
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.5",
     "electron": "^44.4.5",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.18.0",
+    "js-yaml": "^4.3.2",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
@@ -62,10 +70,11 @@
       ],
       "artifactName": "HoaxConnect-${version}-Setup.${ext}",
       "icon": "build/icon.ico",
-      "requestedExecutionLevel": "requireAdministrator"
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
@@ -73,18 +82,31 @@
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
-      "differentialPackage": true
+      "differentialPackage": "store-asar",
+      "include": "build/tunnel-service.nsh"
     },
     "publish": [
       {
         "provider": "generic",
-        "url": "http://194.26.64.55:8090/"
+        "url": "https://hoaxnet.ir/updates/"
       }
     ],
     "extraResources": [
       {
         "from": "native-bin/HoaxTraffic.exe",
         "to": "traffic/HoaxTraffic.exe"
+      },
+      {
+        "from": "native-bin/service",
+        "to": "tunnel-service"
+      },
+      {
+        "from": "build/install-tunnel-service.ps1",
+        "to": "tunnel-service/install-service.ps1"
+      },
+      {
+        "from": "native-bin/routing",
+        "to": "tunnel-service/routing"
       }
     ]
   }

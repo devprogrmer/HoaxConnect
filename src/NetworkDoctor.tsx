@@ -22,6 +22,7 @@ import {
 } from "react";
 
 import "./NetworkDoctor.css";
+import { useI18n } from "./i18n";
 
 function formatBytesPerSecond(value: number) {
   if (value >= 1_000_000) {
@@ -41,6 +42,7 @@ function formatBytesPerSecond(value: number) {
 }
 
 export default function NetworkDoctor() {
+  const { t } = useI18n();
   const [
     activity,
     setActivity,
@@ -491,7 +493,7 @@ export default function NetworkDoctor() {
         </strong>
 
         <span>
-          Network Doctor runs locally on
+          {t("doctor.title")} runs locally on
           Windows.
         </span>
       </div>

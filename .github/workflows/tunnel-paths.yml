@@ -1,0 +1,34 @@
+name: Tunnel paths
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/iran-turkey-path-probes
+  pull_request:
+    paths:
+      - 'vpn-agent/**'
+      - 'scripts/test-tunnel-paths.sh'
+      - 'scripts/test-route-transport.sh'
+      - '.github/workflows/tunnel-paths.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  wireguard-topology:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: vpn-agent/package-lock.json
+      - run: npm ci --prefix vpn-agent
+      - run: npm run build --prefix vpn-agent
+      - run: npm test --prefix vpn-agent
+      - run: sudo apt-get update && sudo apt-get install -y wireguard-tools nftables curl
+      - run: sudo env "PATH=$PATH:/usr/sbin" bash scripts/test-tunnel-paths.sh
+      - run: sudo env "PATH=$PATH:/usr/sbin" bash scripts/test-route-transport.sh

@@ -149,6 +149,8 @@ before(async () => {
     "hoaxconnect-desktop";
   process.env.REFRESH_TOKEN_PEPPER =
     "b".repeat(128);
+  process.env.REFRESH_RECOVERY_ENCRYPTION_KEY =
+    Buffer.alloc(32, 7).toString("base64");
   process.env.ACCESS_TOKEN_TTL_SECONDS = "600";
   process.env.REFRESH_TOKEN_TTL_DAYS = "30";
   process.env.EMAIL_VERIFICATION_REQUIRED = "false";

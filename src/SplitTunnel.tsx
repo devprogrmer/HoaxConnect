@@ -4,9 +4,6 @@ import {
   FolderOpen,
   RefreshCw,
   Search,
-  Shield,
-  Wifi,
-  X,
 } from "lucide-react";
 
 import {
@@ -16,6 +13,8 @@ import {
 } from "react";
 
 import "./SplitTunnel.css";
+import { appCatalog, gameArtwork, gameCatalog } from "./game-catalog";
+import { useI18n } from "./i18n";
 
 const DEFAULT_STATE:
   HoaxSplitTunnelState = {
@@ -24,7 +23,11 @@ const DEFAULT_STATE:
     updatedAt: null,
   };
 
-export default function SplitTunnel() {
+export default function SplitTunnel({ connection, onConnect }: {
+  connection: string;
+  onConnect: () => Promise<void>;
+}) {
+  const { t } = useI18n();
   const [
     apps,
     setApps,
@@ -144,6 +147,18 @@ export default function SplitTunnel() {
       );
     }, [apps, search]);
 
+  const catalogSections = [
+    { title: t("games.gameCatalog"), entries: gameCatalog },
+    { title: t("games.appCatalog"), entries: appCatalog },
+  ].map(({ title, entries }) => ({
+    title,
+    entries: entries.filter(({ name, executables }) => {
+      const query = search.trim().toLowerCase();
+      return name.toLowerCase().includes(query) ||
+        executables.some((executable) => executable.includes(query));
+    }),
+  }));
+
   function toggleApp(
     app: HoaxInstalledApp
   ) {
@@ -247,12 +262,12 @@ export default function SplitTunnel() {
       const result =
         await window.hoax
           .splitTunnel
-          .save(state);
+          .save({ ...state, mode: "selected-only" });
 
       setState(result);
 
       setSavedMessage(
-        "Split Tunnel settings saved."
+        t("games.saved")
       );
 
       window.setTimeout(
@@ -260,6 +275,7 @@ export default function SplitTunnel() {
           setSavedMessage(""),
         2200
       );
+      return true;
     } catch (error) {
       setError(
         error instanceof Error
@@ -277,13 +293,11 @@ export default function SplitTunnel() {
         <AppWindow size={44} />
 
         <strong>
-          Desktop app required
+          {t("games.desktopRequired")}
         </strong>
 
         <span>
-          Installed application scanning
-          is only available inside
-          HoaxConnect for Windows.
+          {t("games.desktopRequiredDescription")}
         </span>
       </div>
     );
@@ -294,23 +308,21 @@ export default function SplitTunnel() {
       <section className="splitHero">
         <div>
           <span className="eyebrow">
-            APPLICATION ROUTING
+            {t("games.applicationRouting")}
           </span>
 
           <h2>
-            Split Tunnel
+            {t("games.yourApps")}
           </h2>
 
           <p>
-            Choose which Windows
-            applications should use
-            HoaxConnect.
+            {t("games.description")}
           </p>
         </div>
 
         <div className="splitSummary">
           <span>
-            SELECTED APPS
+            {t("games.selectedApps")}
           </span>
 
           <strong>
@@ -323,129 +335,15 @@ export default function SplitTunnel() {
         </div>
       </section>
 
-      <section className="splitModeCard">
-        <span className="splitSectionTitle">
-          ROUTING MODE
-        </span>
-
-        <div className="splitModes">
-          <button
-            className={
-              state.mode ===
-              "selected-only"
-                ? "splitModeActive"
-                : ""
-            }
-            onClick={() =>
-              setState((old) => ({
-                ...old,
-                mode:
-                  "selected-only",
-              }))
-            }
-          >
-            <div className="splitModeIcon">
-              <Wifi size={20} />
-            </div>
-
-            <div>
-              <strong>
-                Selected Apps Only
-              </strong>
-
-              <span>
-                Only selected apps will
-                use HoaxConnect.
-              </span>
-            </div>
-
-            {state.mode ===
-              "selected-only" && (
-              <Check size={18} />
-            )}
-          </button>
-
-          <button
-            className={
-              state.mode === "all"
-                ? "splitModeActive"
-                : ""
-            }
-            onClick={() =>
-              setState((old) => ({
-                ...old,
-                mode: "all",
-              }))
-            }
-          >
-            <div className="splitModeIcon">
-              <Shield size={20} />
-            </div>
-
-            <div>
-              <strong>
-                All Traffic
-              </strong>
-
-              <span>
-                Route the whole device
-                through HoaxConnect.
-              </span>
-            </div>
-
-            {state.mode ===
-              "all" && (
-              <Check size={18} />
-            )}
-          </button>
-
-          <button
-            className={
-              state.mode ===
-              "exclude-selected"
-                ? "splitModeActive"
-                : ""
-            }
-            onClick={() =>
-              setState((old) => ({
-                ...old,
-                mode:
-                  "exclude-selected",
-              }))
-            }
-          >
-            <div className="splitModeIcon">
-              <X size={20} />
-            </div>
-
-            <div>
-              <strong>
-                All Except Selected
-              </strong>
-
-              <span>
-                Selected apps stay on
-                direct internet.
-              </span>
-            </div>
-
-            {state.mode ===
-              "exclude-selected" && (
-              <Check size={18} />
-            )}
-          </button>
-        </div>
-      </section>
-
       <section className="splitAppsCard">
         <div className="splitAppsHeader">
           <div>
             <span className="splitSectionTitle">
-              WINDOWS APPLICATIONS
+              {t("games.windowsApps")}
             </span>
 
             <strong>
-              Choose apps
+              {t("games.find")}
             </strong>
           </div>
 
@@ -463,7 +361,7 @@ export default function SplitTunnel() {
                 }
               />
 
-              REFRESH
+              {t("games.refresh")}
             </button>
 
             <button
@@ -471,7 +369,7 @@ export default function SplitTunnel() {
             >
               <FolderOpen size={15} />
 
-              ADD EXE
+              {t("games.addExe")}
             </button>
           </div>
         </div>
@@ -486,9 +384,46 @@ export default function SplitTunnel() {
                 event.target.value
               )
             }
-            placeholder="Search installed applications..."
+            placeholder={t("games.search")}
           />
         </div>
+
+        {catalogSections.map(({ title, entries }) => entries.length > 0 && (
+          <section key={title} className="splitCatalog" aria-label={title}>
+            <h3>{title}</h3>
+            <div className="splitAppList">
+              {entries.map((game) => {
+                const installed = apps.filter((app) =>
+                  game.executables.some((exe) => exe === app.exeName.toLowerCase())
+                );
+                const match = installed.length === 1 ? installed[0] : undefined;
+                const selected = match ? selectedIDs.has(match.id) : false;
+                const artwork = game.steamId ? gameArtwork(game.steamId) : match?.icon;
+                return (
+                  <button
+                    key={game.name}
+                    type="button"
+                    className={`splitApp splitCatalogGame${selected ? " splitAppSelected" : ""}`}
+                    aria-pressed={selected}
+                    disabled={!match}
+                    onClick={() => { if (match) toggleApp(match); }}
+                  >
+                    <div className="splitCatalogArtwork">
+                      <AppWindow size={24} aria-hidden="true" />
+                      {artwork && <img src={artwork} alt="" loading="lazy"
+                        style={game.steamId ? undefined : { objectFit: "contain" }}
+                        referrerPolicy="no-referrer"
+                        onError={(event) => { event.currentTarget.hidden = true; }} />}
+                    </div>
+                    <strong>{game.name}</strong>
+                    <span>{match ? (selected ? t("status.selected") : t("status.available")) :
+                      installed.length > 1 ? t("games.chooseExecutable") : t("status.notInstalled")}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
 
         {error && (
           <div className="splitError">
@@ -503,10 +438,11 @@ export default function SplitTunnel() {
               size={28}
             />
 
-            Scanning Windows
-            applications...
+            {t("games.scanning")}
           </div>
         ) : (
+          <>
+          <h3>{t("games.yourWindowsApps")}</h3>
           <div className="splitAppList">
             {visibleApps.map(
               (app) => {
@@ -514,6 +450,10 @@ export default function SplitTunnel() {
                   selectedIDs.has(
                     app.id
                   );
+                const launcherArtwork =
+                  app.source === "steam" && app.launcherId && /^\d+$/.test(app.launcherId)
+                    ? gameArtwork(Number(app.launcherId))
+                    : null;
 
                 return (
                   <button
@@ -526,12 +466,15 @@ export default function SplitTunnel() {
                     onClick={() =>
                       toggleApp(app)
                     }
+                    aria-pressed={selected}
                   >
                     <div className="splitAppIcon">
-                      {app.icon ? (
+                      {app.icon || launcherArtwork ? (
                         <img
-                          src={app.icon}
+                          src={app.icon || launcherArtwork || undefined}
                           alt=""
+                          referrerPolicy="no-referrer"
+                          onError={(event) => { event.currentTarget.hidden = true; }}
                         />
                       ) : (
                         <AppWindow
@@ -548,7 +491,7 @@ export default function SplitTunnel() {
 
                         {app.running && (
                           <span className="runningBadge">
-                            RUNNING
+                            {t("status.running")}
                           </span>
                         )}
                       </div>
@@ -585,26 +528,23 @@ export default function SplitTunnel() {
             {!visibleApps.length &&
               !loading && (
                 <div className="splitEmpty">
-                  No applications found.
+                  {t("games.noneFound")}
                 </div>
               )}
           </div>
+          </>
         )}
 
         <div className="splitFooter">
           <div>
             <strong>
-              {
-                state
-                  .selectedApps
-                  .length
-              }{" "}
-              apps selected
+              {t("games.appsSelected", { count: state.selectedApps.length })}
             </strong>
 
             <span>
-              Settings are stored locally
-              on this Windows device.
+              {state.selectedApps.length === 0
+                ? t("games.selectAtLeastOne")
+                : t("games.selectedOnly")}
             </span>
           </div>
 
@@ -618,35 +558,21 @@ export default function SplitTunnel() {
 
             <button
               className="splitSave"
-              onClick={save}
-              disabled={saving}
+              onClick={async () => {
+                if (connection === "connected" || await save()) await onConnect();
+              }}
+              disabled={saving || connection === "connecting" ||
+                connection === "disconnecting" ||
+                (connection !== "connected" && state.selectedApps.length === 0)}
             >
-              {saving
-                ? "SAVING..."
-                : "SAVE SETTINGS"}
+              {connection === "connected" ? t("games.disconnect") :
+                connection === "disconnecting" ? t("games.disconnecting") :
+                saving || connection === "connecting" ? t("games.connecting") : t("games.connectSelected")}
             </button>
           </div>
         </div>
       </section>
 
-      <div className="splitEngineNotice">
-        <Shield size={16} />
-
-        <div>
-          <strong>
-            Routing engine status:
-            configuration ready
-          </strong>
-
-          <span>
-            App discovery and selection
-            are active. Per-process VPN
-            enforcement will become active
-            when the HoaxConnect VPN/WFP
-            service is installed.
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

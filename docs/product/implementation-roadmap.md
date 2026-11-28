@@ -144,7 +144,8 @@ Acceptance evidence:
 
 ## Stage 2D: Admin API
 
-Status: PLANNED
+Status: IN PROGRESS. API and schema are implemented locally; isolated
+PostgreSQL acceptance tests and deployment verification remain pending.
 
 Scope includes users, devices, sessions, plans, subscriptions, traffic, bans,
 audit, alerts, RBAC enforcement, and VPN-node management foundations.
@@ -153,12 +154,20 @@ Acceptance requires authorization tests for every role and auditable mutations.
 
 ## Stage 2E: React Admin Panel
 
-Status: PLANNED
+Status: IN PROGRESS. The React console builds locally; database-backed runtime,
+browser acceptance, and deployment at `/admin` remain pending.
 
 The Admin Panel is an operational control center, not a raw VPN configuration
 panel. It consumes only the authenticated Admin API.
 
 Acceptance requires real API-backed workflows and role-specific UI behavior.
+
+Current local scope includes API-backed overview, users/detail, sessions, plans,
+subscriptions, VPN-node inventory, payments, audit/access, integrations, Admin
+accounts, alerts, and accounting-traffic reports. SMS provider credentials are
+only stored encrypted and shown inactive; templates, send tests, and delivery
+logs remain Stage 3 work. No node agent or authoritative live traffic source is
+connected.
 
 ## Stage 3: SMS And Verification
 

@@ -2059,3 +2059,61 @@ button:disabled {
   font-size: 12px;
   line-height: 1.5;
 }
+ .device-reporting-settings { margin-bottom: 24px; border-bottom: 1px solid #29333b; padding-bottom: 20px; }
+ .device-reporting-settings p { color: #a7b4bc; font-size: 13px; line-height: 1.5; }
+ .device-reporting-settings fieldset { border: 0; padding: 0; margin: 0; }
+ .device-reporting-settings .settingRow > span { display: grid; gap: 5px; min-width: 0; }
+ .device-reporting-settings .settingRow > span > span { color: #a7b4bc; font-size: 12px; line-height: 1.5; }
+ .device-reporting-settings input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #63dbaa; }
+.languageSwitcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  align-self: flex-end;
+}
+
+.languageSwitcher button {
+  min-width: 42px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #7e8794;
+  background: transparent;
+  cursor: pointer;
+}
+
+.languageSwitcher .languageActive {
+  color: #07120d;
+  background: #6fe5a5;
+}
+
+.languageSettingsCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-block-end: 18px;
+}
+
+.languageSettingsCard > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.languageSettingsCard span {
+  color: var(--muted);
+}
+
+html[dir="rtl"] body {
+  text-align: right;
+}
+
+html[dir="rtl"] .sidebar,
+html[dir="rtl"] .loginCard,
+html[dir="rtl"] .inputGroup {
+  direction: rtl;
+}

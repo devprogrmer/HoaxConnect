@@ -16,6 +16,7 @@ tests=(
   "$HC_TEST_DIR/test-backup-restore.sh"
   "$HC_TEST_DIR/test-update.sh"
   "$HC_TEST_DIR/test-status-uninstall.sh"
+  "$HC_TEST_DIR/test-vpn-e2e-preflight-safety.sh"
 )
 
 failures=0

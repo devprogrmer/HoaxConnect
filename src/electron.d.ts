@@ -53,6 +53,7 @@ declare global {
     protocol: "TCP" | "UDP";
     packets: number;
     source: string;
+
     score: number;
   }
 
@@ -163,6 +164,8 @@ declare global {
 
     source: string;
 
+    launcherId?: string;
+
     running: boolean;
 
     icon:
@@ -193,6 +196,25 @@ declare global {
       | string
       | null;
   }
+
+  type HoaxVpnConnectionStatus =
+    | "idle"
+    | "connecting"
+    | "connected"
+    | "disconnecting"
+    | "error";
+
+  interface HoaxVpnConnectionState {
+    status: HoaxVpnConnectionStatus;
+    node: null | { id: string; endpoint: string; public_key: string };
+    paths?: Array<{ id: string; endpoint: string; public_key: string }>;
+    leaseExpiresAt: string | null;
+    error: null | { code: string; message: string };
+  }
+
+  type HoaxVpnResponse =
+    | { ok: true; state: HoaxVpnConnectionState }
+    | { ok: false; error: { code: string; message: string } };
 
   interface HoaxDoctorProcess {
     id: string;
@@ -497,7 +519,14 @@ declare global {
     | HoaxAuthSignOutSuccess
     | HoaxAuthFailure;
 
+  interface HoaxReportingPermissions { hardware: boolean; network: boolean; applications: boolean; }
+  type HoaxReportingResponse = { ok: true; permissions: HoaxReportingPermissions; lastSentAt: string | null } | HoaxAuthFailure;
+
   interface HoaxAPI {
+    reporting: {
+      getSettings(): Promise<HoaxReportingResponse>;
+      setPermissions(permissions: HoaxReportingPermissions): Promise<HoaxReportingResponse>;
+    };
     auth: {
       getState(): Promise<HoaxAuthResponse>;
       login(input: {
@@ -513,6 +542,7 @@ declare global {
       restore(): Promise<HoaxAuthResponse>;
       logout(): Promise<HoaxAuthSignOutResponse>;
       logoutAll(): Promise<HoaxAuthSignOutResponse>;
+      onPolicy(handler: (error: { code: "ACCOUNT_SUSPENDED" | "ACCOUNT_BANNED"; message: string }) => void): () => void;
     };
     isDesktop: boolean;
 
@@ -546,6 +576,30 @@ declare global {
         Promise<
           HoaxSplitTunnelState
         >;
+    };
+
+    vpn: {
+      nodes(): Promise<{
+        ok: boolean;
+        nodes?: Array<{
+          id: string;
+          name: string;
+          country_code: string;
+          region: string;
+          city: string | null;
+          capacity_peers: number;
+          current_peers: number;
+          load_percent: number;
+        }>;
+        error?: { code: string; message: string };
+      }>;
+      status(): Promise<HoaxVpnResponse>;
+      connect(location?: {
+        countryCode?: string;
+        region?: string;
+        pathCount?: number;
+      }): Promise<HoaxVpnResponse>;
+      disconnect(): Promise<HoaxVpnResponse>;
     };
 
     doctor: {
