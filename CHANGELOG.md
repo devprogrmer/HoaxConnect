@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a generic probe-scored Linux transit path controller with hysteresis and cooldown for multiple preconfigured routes to one fixed Turkey endpoint.
 - Added an Admin route-group page and audited, optimistic-version topology updates for inactive Iran-entry/Turkey-gateway groups; this does not activate a network tunnel.
 - Added a PostgreSQL GitHub Actions job for backend integration tests and route-group API coverage.
 - Corrected Admin node status to show a fresh authenticated agent heartbeat and expire stale online status after 90 seconds.
